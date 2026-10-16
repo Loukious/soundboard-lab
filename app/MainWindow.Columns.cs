@@ -15,6 +15,17 @@ public partial class MainWindow
     private string categorySortKey="";
     private ListSortDirection categorySortDirection;
     internal int SoundIndex(SoundEntry sound)=>library.Document.Entries.IndexOf(sound)+1;
+    private void AlignCategoryCountHeader()
+    {
+        if(CategoryTree.Items.OfType<TreeViewItem>().FirstOrDefault()?.Header is not Grid row||row.ActualWidth<=0)return;
+        var number=row.Children.OfType<TextBlock>().FirstOrDefault();
+        var header=Descendants(CategoryCountHeader).OfType<ContentPresenter>().FirstOrDefault();
+        if(number is null||header is null||header.ActualWidth<=0)return;
+        double countCenter=number.TranslatePoint(new Point(number.ActualWidth/2,0),CategoryHeaders).X;
+        double headerCenter=header.TranslatePoint(new Point(header.ActualWidth/2,0),CategoryHeaders).X;
+        double correction=headerCenter-countCenter;
+        if(Math.Abs(correction)>.75)CategoryHeaders.Margin=new Thickness(0,0,Math.Max(0,CategoryHeaders.Margin.Right+correction),0);
+    }
     private object CategoryLayout()
     {
         var row=CategoryTree.ItemContainerGenerator.ContainerFromIndex(0) as TreeViewItem;
