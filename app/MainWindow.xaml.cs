@@ -72,6 +72,8 @@ public partial class MainWindow : Window
         appliedDucking=Settings.ReduceOtherApplications?Settings.OtherApplicationsVolume:null;
         InitializeComponent();
         CategoryTree.LayoutUpdated+=(_,_)=>AlignCategoryCountHeader();
+        VolumeSliderFeedback.Attach(SpeakerSlider,value=>Settings.LinearVolumeSlider?value:value*value);
+        VolumeSliderFeedback.Attach(ClipSlider,value=>Settings.LinearVolumeSlider?value:value*value/2);
         InitializeForwarding();
         Icon=System.Windows.Media.Imaging.BitmapFrame.Create(new Uri("pack://application:,,,/SoundboardLab;component/assets/app-icon.ico"));
         ConfigureColumnMenu();
