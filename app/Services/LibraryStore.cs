@@ -177,6 +177,11 @@ public sealed class LibraryStore : IDisposable
         {
             string name = (string?)node.Attribute("name") ?? "";
             if (name.Length == 0) { foreach (var child in node.Elements("Category")) Category(child, parent); return; }
+            if(parent.Length==0&&(string?)node.Attribute("icon")=="stock_icon_cat_home"){
+                next.RootCategory.Name=name;
+                foreach(var child in node.Elements("Category"))Category(child,"");
+                return;
+            }
             string full = parent.Length == 0 ? name : parent + "/" + name;
             if (!next.Categories.Any(c => c.Name == full)) next.Categories.Add(new() { Name = full, Parent = parent });
             foreach (var reference in node.Elements("Sound")) {
@@ -268,6 +273,7 @@ public sealed class LibraryStore : IDisposable
             entry.FilePath = Path.GetFullPath(entry.FilePath, directory);
         }
         document.RootCategory ??=new(){Name="My Sounds",StockIcon="Home"};
+        NormalizeImportedHome(document);
         if (document.Categories.Any(c => c is null || string.IsNullOrWhiteSpace(c.Name))) throw new InvalidDataException("Library contains an invalid category.");
         foreach(var category in document.Categories.Prepend(document.RootCategory))if(!string.IsNullOrWhiteSpace(category.IconPath))category.IconPath=Path.GetFullPath(category.IconPath,directory);
         document.HotbarPins ??= [];
@@ -276,6 +282,22 @@ public sealed class LibraryStore : IDisposable
         var positions=new HashSet<(int,int)>(); var pinIds=new HashSet<Guid>();
         foreach(var pin in document.HotbarPins) if(pin is null || pin.Id==Guid.Empty || !pinIds.Add(pin.Id) || !ids.Contains(pin.SoundId) || pin.Page<0 || pin.Slot<0 || !positions.Add((pin.Page,pin.Slot))) throw new InvalidDataException("Library contains an invalid hotbar pin.");
         return document;
+    }
+    private static void NormalizeImportedHome(LibraryDocument document)
+    {
+        if(string.IsNullOrWhiteSpace(document.SourceMetadataXml))return;
+        try {
+            using var reader=XmlReader.Create(new StringReader(document.SourceMetadataXml),new XmlReaderSettings {DtdProcessing=DtdProcessing.Prohibit,XmlResolver=null,MaxCharactersInDocument=16*1024*1024});
+            var home=XDocument.Load(reader).Root?.Element("Categories")?.Elements("Category").FirstOrDefault(x=>(string?)x.Attribute("icon")=="stock_icon_cat_home");
+            string name=(string?)home?.Attribute("name")??"";
+            var duplicate=document.Categories.FirstOrDefault(x=>x.Name==name&&x.Parent.Length==0);
+            if(name.Length==0||duplicate is null)return;
+            document.Categories.Remove(duplicate);
+            if(document.RootCategory.Name=="My Sounds")document.RootCategory.Name=name;
+            string prefix=name+"/";
+            foreach(var entry in document.Entries){if(entry.Category==name)entry.Category="";else if(entry.Category.StartsWith(prefix,StringComparison.Ordinal))entry.Category=entry.Category[prefix.Length..];}
+            foreach(var category in document.Categories.Where(x=>x.Name.StartsWith(prefix,StringComparison.Ordinal))){category.Name=category.Name[prefix.Length..];category.Parent=Parent(category.Name);}
+        } catch(XmlException){ /* Historical metadata does not invalidate a usable JSON library. */ }
     }
     private void WriteRecovery()
     {

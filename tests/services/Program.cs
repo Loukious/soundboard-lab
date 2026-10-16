@@ -102,6 +102,15 @@ try
     var rightCapture=new HotkeyCaptureState("",true);rightCapture.Record(new(75,16,true));
     Check(rightCapture.Gesture=="RCtrl+K","Capture lost right-hand modifier identity.");
     capture.Record(new(75,16,true));Check(capture.Gesture=="Ctrl+K","Default capture did not merge right-hand modifiers.");
+    string homeList=Path.Combine(temp,"home.spl");
+    File.WriteAllText(homeList,"<Soundlist><Sound url=\"clip.wav\"/><Sound url=\"second.wav\"/><Categories><Category name=\"My Sounds\" icon=\"stock_icon_cat_home\"><Sound id=\"0\"/></Category><Category name=\"Voice\"><Sound id=\"1\"/></Category></Categories></Soundlist>");
+    using(var homes=new LibraryStore(Path.Combine(temp,"home-import"))){
+        homes.ImportSoundpad(homeList);
+        Check(homes.Document.RootCategory.Name=="My Sounds"&&homes.Document.Categories.Select(x=>x.Name).SequenceEqual(new[]{"Voice"})&&homes.Document.Entries[0].Category==""&&homes.Document.Entries[1].Category=="Voice","SPL home category was duplicated or ordinary category membership was lost.");
+        homes.Document.Categories.Add(new(){Name="My Sounds"});homes.Document.Entries[0].Category="My Sounds";
+        string legacyHome=Path.Combine(temp,"legacy-home.json");homes.Save(legacyHome);homes.Load(legacyHome);
+        Check(homes.Document.Categories.Count==1&&homes.Document.Entries.Count==2&&homes.Document.Entries[0].Category=="","Previously imported home duplicates were not repaired while retaining sounds.");
+    }
     string normalKey="Ctrl+F2",specialKey="Ctrl+F3",ownKey="Ctrl+F4";
     HotkeyAssignment[] assignments=[new("sound",()=>normalKey,value=>normalKey=value),new("special",()=>specialKey,value=>specialKey=value,true),new("own",()=>ownKey,value=>ownKey=value)];
     Check(HotkeyAssignments.Check(assignments,"own","RCtrl+F3",false).Blocked,"An equivalent special binding was not protected.");

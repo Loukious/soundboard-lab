@@ -145,6 +145,7 @@ public partial class MainWindow : Window
     private void RefreshLibrary()
     {
         if (!initialized || closing) return;
+        if(selectedCategory is not ("*" or "")&&!library.Document.Categories.Any(x=>x.Name==selectedCategory))selectedCategory="*";
         RefreshSoundSorting();view?.Refresh();
         Title = "Soundboard Lab · " + (Path.GetFileName(library.CurrentPath) ?? "New library") + (library.HasUnsavedChanges ? " *" : "");
         LibraryCount.Text = $"{library.Document.Entries.Count} sounds · {library.Document.Entries.Sum(x => x.PlayCount)} plays";
