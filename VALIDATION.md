@@ -9,9 +9,9 @@
 | Suite | Coverage |
 |---|---|
 | Native | Actual APO COM callbacks, aggregation/lifetime, gains, voice blocking, pause/stop, formats, queue backpressure, multiple consumers, vendor-effect wrapping, concurrency, cross-process shared memory. |
-| Audio engine, offline | PCM conversion, loudness/normalization, editing, encoding/MP3 bitrates, gain isolation, cursor arithmetic, bounded forwarding queues, independent clip/live gain, clipping, pause and clip completion. |
+| Audio engine, offline | PCM conversion, loudness/normalization, editing, encoding/MP3 bitrates, gain isolation, cursor arithmetic, bounded forwarding queues, independent clip/live gain, clipping, pause and clip completion. Simulated application sessions verify process isolation, Mixer readback, and gain applied once. |
 | Services | Library recovery/export, persistence, simulated hotkey dispatch/capture/conflicts, Auto Keys, pipes, toggle/hold forwarding, key/modifier release, repeat rejection, cancellation during startup. |
-| WPF, layout-only | Actual hidden controls, hotkey editors, menus, Preferences layouts/dependencies, forwarding controls/default-off state, unshown device setup. No playback/capture. |
+| WPF, layout-only | Actual hidden controls, search navigation, category initials/editor labels/count alignment, status highlights, percentage feedback, missing sounds/color swatches, hotkey editors, menus, Preferences layouts/dependencies, forwarding controls/default-off state, unshown device setup. No playback/capture. |
 | Installer plan | Pure fixtures preserving/chaining/restoring vendor effects across mode changes, repair, invalid-backup rejection. Scripts are parsed without running setup. |
 | GUI helper | Repeated PowerShell helper loading and refusal to run interactive tests without explicit opt-in. |
 
@@ -31,6 +31,7 @@ This opt-in capture test targets the test process and writes no recording. The f
 
 ## Explicit opt-ins
 
+- `dotnet run --project tests/engine -- --offline --session-volume`: starts a silent stream in the test process, changes only that process's Mixer session, and verifies the endpoint volume and mute state remain unchanged. No window, input, audible samples, or capture.
 - `-RunInteractiveTests`: opens/activates windows and sends desktop input.
 - `-RunCommunicationsTests`: can trigger Windows ducking through a communications stream.
 - `tests/live/`: physical capture verification with deliberate endpoint selection/setup.

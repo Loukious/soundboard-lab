@@ -67,6 +67,7 @@ internal static class Program
             await Task.Delay(30);Layout();
             var grid=Field<DataGrid>(window,"SoundGrid");var volume=Field<Slider>(window,"SpeakerSlider");var engine=Field<AudioService>(window,"audio");
             await CheckMissingSoundsAndColors(window,library,sound,temp);
+            await CheckSearchAndCategoryLayout(window,library,sound,temp);
             if(layoutOnly){CheckHotkeyEditor(window,library,sound);CheckMenusAndSpecialHotkeys(window);CheckPreferencePages(window,temp);Console.WriteLine($"PASS {checks} headless WPF layout checks. No capture, rendering, window activation or OS input.");return;}
             int frameworkDoubleClicks=0;var frameworkControl=new Control();frameworkControl.MouseDoubleClick+=(_,_)=>frameworkDoubleClicks++;
             for(int click=1;click<=20;click++){
@@ -165,6 +166,66 @@ internal static class Program
             Directory.Delete(temp,true);
         }
         Console.WriteLine($"PASS {checks} headless WPF control checks. No window shown, no mouse or keyboard input sent; playback remained muted.");
+    }
+    private static async Task CheckSearchAndCategoryLayout(MainWindow window,LibraryStore library,SoundEntry existing,string temp)
+    {
+        var root=(FrameworkElement)window.Content;var grid=Field<DataGrid>(window,"SoundGrid");
+        async Task Layout(){root.Measure(new Size(1020,660));root.Arrange(new Rect(0,0,1020,660));root.UpdateLayout();await Dispatcher.Yield(DispatcherPriority.ContextIdle);root.UpdateLayout();}
+        Check(Field<object?>(window,"applicationSessionVolume") is null&&typeof(AudioService).GetProperty("ApplicationVolume",BindingFlags.Static|BindingFlags.NonPublic)!.GetValue(null) is null,"hidden UI checks never start the application's Windows Mixer stream or volume controller");
+        var added=new List<SoundEntry>();foreach(string title in new[]{"Amber tone","Amber bell","Blue tone"}){string file=Path.Combine(temp,title+".wav");File.Copy(existing.FilePath,file);var entry=library.AddFiles([file]).Single();entry.Title=title;added.Add(entry);}
+        var search=Field<TextBox>(window,"SearchBox");Field<FrameworkElement>(window,"SearchPanel").Visibility=Visibility.Visible;await Layout();
+        search.Text="Amber";await Layout();
+        Check(grid.Items.Count==4&&ReferenceEquals(grid.SelectedItem,added[0]),"incremental search selects the first match while preserving every row");
+        Field<Button>(window,"SearchNextButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Check(ReferenceEquals(grid.SelectedItem,added[1]),"the actual Find next button advances to the next match");
+        Field<Button>(window,"SearchPreviousButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Check(ReferenceEquals(grid.SelectedItem,added[0]),"the actual Find previous button selects the previous match");
+        Invoke(window,"FindSearchMatch",-1);Check(ReferenceEquals(grid.SelectedItem,added[1]),"search navigation wraps around the match list");
+        search.Text="3";Check(ReferenceEquals(grid.SelectedItem,added[1]),"a single numeric query finds the original sound index");
+        search.Text="A";Check(!Field<Button>(window,"SearchNextButton").IsEnabled&&grid.Items.Count==4,"single-letter typing waits for more text without filtering the library");
+        search.Text="no such sound";Check(!Field<Button>(window,"SearchNextButton").IsEnabled&&added.All(x=>x.PlayCount==0),"a search without matches disables navigation and never plays a sound");
+        library.AddCategory("Search Amber");library.AddCategory("Search Blue");added[0].Category=added[1].Category="Search Amber";added[2].Category="Search Blue";await Layout();search.Text="Amber";
+        Invoke(window,"CategoryTree_Changed",Field<TreeView>(window,"CategoryTree"),new RoutedPropertyChangedEventArgs<object>(existing,new TreeViewItem {Tag="Search Blue"}));
+        Check(grid.Items.Count==1&&!Field<Button>(window,"SearchNextButton").IsEnabled,"switching categories refreshes navigation for an existing search query");
+        Invoke(window,"CategoryTree_Changed",Field<TreeView>(window,"CategoryTree"),new RoutedPropertyChangedEventArgs<object>(existing,new TreeViewItem {Tag="Search Amber"}));
+        Check(grid.Items.Count==2&&Field<Button>(window,"SearchNextButton").IsEnabled,"search navigation re-enables when the selected category contains matches");
+        Invoke(window,"CategoryTree_Changed",Field<TreeView>(window,"CategoryTree"),new RoutedPropertyChangedEventArgs<object>(existing,new TreeViewItem {Tag="*"}));
+        Invoke(window,"ResetSearch");Check(search.Text==""&&Field<FrameworkElement>(window,"SearchPanel").Visibility==Visibility.Collapsed&&grid.Items.Count==4,"resetting search closes the panel and retains the complete list");
+        library.Remove(added);library.RemoveCategory("Search Amber");library.RemoveCategory("Search Blue");await Layout();
+        var settings=Field<PreferenceStore>(window,"preferenceStore").Settings;var speaker=Field<Slider>(window,"SpeakerSlider");var clip=Field<Slider>(window,"ClipSlider");
+        speaker.Value=.37;clip.Value=1.5;
+        Check(speaker.ToolTip is ToolTip {Content:"37%",IsOpen:false}&&clip.ToolTip is ToolTip {Content:"150%",IsOpen:false},"speaker and microphone sliders maintain percentage feedback without opening test popups");
+        settings.LinearVolumeSlider=false;speaker.Value=.5;Check(((ToolTip)speaker.ToolTip).Content as string=="25%","nonlinear slider feedback displays the applied gain");settings.LinearVolumeSlider=true;speaker.Value=0;clip.Value=1;
+        bool initialized=Field<bool>(window,"initialized");typeof(MainWindow).GetField("initialized",Private)!.SetValue(window,false);
+        try{
+            foreach(string name in new[]{"HotkeysBox","AutoKeysBox"}){
+                var box=Field<CheckBox>(window,name);bool? previous=box.IsChecked;box.IsChecked=true;await Layout();
+                var chrome=(Border)box.Template.FindName("CheckChrome",box);var icon=(FrameworkElement)box.Content;double top=icon.TranslatePoint(new Point(),chrome).Y,bottom=chrome.ActualHeight-top-icon.ActualHeight;
+                Check(top>=3&&bottom>=3&&Math.Abs(top-bottom)<=1,name+" has a visible enabled highlight above and below its icon");box.IsChecked=previous;
+            }
+        }finally{typeof(MainWindow).GetField("initialized",Private)!.SetValue(window,initialized);}
+        var originalCategories=library.Document.Categories.ToArray();for(int i=0;i<40;i++)library.AddCategory("Layout "+i);
+        await Layout();await Layout();var tree=Field<TreeView>(window,"CategoryTree");
+        var number=((Grid)((TreeViewItem)tree.Items[0]).Header).Children.OfType<TextBlock>().First();var header=Descendants<ContentPresenter>(Field<Button>(window,"CategoryCountHeader")).First();
+        double countCenter=number.TranslatePoint(new Point(number.ActualWidth/2,0),root).X,headerCenter=header.TranslatePoint(new Point(header.ActualWidth/2,0),root).X;
+        Check(Descendants<ScrollBar>(tree).Any(x=>x.Orientation==Orientation.Vertical&&x.Visibility==Visibility.Visible)&&Math.Abs(countCenter-headerCenter)<1.1,"the category # header follows the actual count column when its scrollbar appears");
+        var category=new CategoryEntry {Name="Voice"};
+        var heading=(Grid)Invoke(window,"CategoryHeader","Voice",0,false,category)!;
+        Check(Descendants<TextBlock>(heading).Any(x=>x.Text=="V"),"a new category renders its first letter instead of a folder");
+        category.IconMode="Stock";category.StockIcon="Folder";heading=(Grid)Invoke(window,"CategoryHeader","Voice",0,false,category)!;
+        Check(Descendants<TextBlock>(heading).Any(x=>x.Text=="V"),"legacy default folder categories also render generated initials");
+        category.IconModeExplicit=true;heading=(Grid)Invoke(window,"CategoryHeader","Voice",0,false,category)!;
+        Check(Descendants<System.Windows.Shapes.Path>(heading).Any(),"explicitly chosen stock icons remain available");
+        var editor=(Window)Activator.CreateInstance(typeof(MainWindow).Assembly.GetType("SoundboardLab.CategoryEditWindow")!,[new CategoryEntry {Name="Voice"},new Func<Window,string,string?>((_,_)=>null)])!;
+        try{
+            var body=(FrameworkElement)editor.Content;body.Measure(new Size(370,306));body.Arrange(new Rect(0,0,370,306));body.UpdateLayout();
+            var generated=Descendants<RadioButton>(body).Single(x=>AutomationProperties.GetAutomationId(x)=="CategoryIconGenerated");
+            var text=Descendants<TextBlock>(generated).Single(x=>x.Text=="Generated");
+            Check(text.ActualWidth>=text.DesiredSize.Width-.5&&text.TranslatePoint(new Point(text.ActualWidth,0),(FrameworkElement)generated.Parent).X<=((FrameworkElement)generated.Parent).ActualWidth+.5,"the Generated option fits its label inside the category editor");
+        }finally{editor.Close();}
+        foreach(var categoryToRemove in library.Document.Categories.Except(originalCategories).ToArray())library.Document.Categories.Remove(categoryToRemove);
+        await Layout();grid.SelectedItem=existing;
+        Check(!window.IsVisible&&!window.IsActive,"search, category and slider checks leave the real application hidden and inactive");
     }
     private static async Task CheckMissingSoundsAndColors(MainWindow window,LibraryStore library,SoundEntry existing,string temp)
     {

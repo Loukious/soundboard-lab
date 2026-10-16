@@ -4,6 +4,18 @@ Numbered releases use Semantic Versioning: `MAJOR.MINOR.PATCH`. Before 1.0,
 minor versions introduce features and patch versions contain fixes. Release tags
 use `v` followed by the app version; prereleases use a suffix such as `-rc.1`.
 
+## [Unreleased]
+
+- Restore incremental search with previous/next buttons, keyboard navigation, numeric index lookup, and reset/close.
+- Show live percentages while adjusting speaker and microphone volume sliders.
+- Synchronize speaker volume with this process's Windows Mixer sessions, without applying speaker gain twice.
+- Generate category icons from their first letter, including legacy default folder icons.
+- Prevent the Generated icon option from being cropped in Edit category.
+- Draw enabled status highlights above and below the H and A icons.
+- Import the SPL home category without adding a second My Sounds category, and normalize previously imported copies.
+- Align the category count header with the visible count column when a scrollbar appears.
+- Grey and strike through missing sounds after playback fails; restore the numbered sound color palette, swatches, and color tool.
+
 ## [0.1.0] - 2026-10-16
 
 First numbered Windows x64 development release.
