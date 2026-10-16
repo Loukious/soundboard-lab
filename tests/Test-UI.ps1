@@ -30,7 +30,7 @@ try {
     Check ((Request @{command='state'}).libraryCount -eq 3) 'file import populates the bound library'
     Request @{command='rename';index=0;title='Amber test tone'} | Out-Null
     Request @{command='search';text='Amber'} | Out-Null
-    Check ((Request @{command='state'}).visibleCount -eq 1) 'search filters live collection view'
+    Check ((Request @{command='state'}).visibleCount -eq 3) 'search preserves the list while finding matching sounds'
     Request @{command='search';text=''} | Out-Null
     Request @{command='category';name='Effects/Short'} | Out-Null
     Request @{command='move';index=0;category='Effects/Short'} | Out-Null

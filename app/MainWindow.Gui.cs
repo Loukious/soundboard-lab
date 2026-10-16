@@ -128,7 +128,7 @@ public partial class MainWindow
         };
     }
     private void Find_Click(object sender, RoutedEventArgs e) { SearchPanel.Visibility = Visibility.Visible; SearchBox.Focus(); SearchBox.SelectAll(); }
-    private void CloseSearch_Click(object sender, RoutedEventArgs e) { SearchBox.Clear(); SearchPanel.Visibility = Visibility.Collapsed; SoundGrid.Focus(); }
+    private void CloseSearch_Click(object sender, RoutedEventArgs e) { ResetSearch(); SoundGrid.Focus(); }
     private void ToggleCategories_Click(object sender, RoutedEventArgs e)
     {
         bool show = (sender as MenuItem)?.IsChecked == true;

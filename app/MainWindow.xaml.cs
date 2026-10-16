@@ -142,14 +142,14 @@ public partial class MainWindow : Window
     {
         if (item is not SoundEntry entry) return false;
         bool category = selectedCategory == "*" || entry.Category == selectedCategory || entry.Category.StartsWith(selectedCategory + "/", StringComparison.OrdinalIgnoreCase);
-        string query = SearchBox?.Text?.Trim() ?? "";
-        return category && (query.Length == 0 || (entry.Title + " " + entry.Tags + " " + entry.Category + " " + entry.FilePath).Contains(query, StringComparison.OrdinalIgnoreCase));
+        return category;
     }
     private void RefreshLibrary()
     {
         if (!initialized || closing) return;
         if(selectedCategory is not ("*" or "")&&!library.Document.Categories.Any(x=>x.Name==selectedCategory))selectedCategory="*";
         RefreshSoundSorting();view?.Refresh();
+        UpdateSearchResults();
         Title = "Soundboard Lab · " + (Path.GetFileName(library.CurrentPath) ?? "New library") + (library.HasUnsavedChanges ? " *" : "");
         LibraryCount.Text = $"{library.Document.Entries.Count} sounds · {library.Document.Entries.Sum(x => x.PlayCount)} plays";
         RecentLibraries.IsEnabled=Settings.RecentLists.Any(File.Exists);RecentLibraries.Items.Clear(); foreach (string path in Settings.RecentLists.Where(File.Exists)) { var item = new MenuItem { Header = Path.GetFileName(path), ToolTip = path }; item.Click += (_, _) => Guard(() => library.Load(path)); RecentLibraries.Items.Add(item); }
@@ -221,8 +221,8 @@ public partial class MainWindow : Window
         }
         } finally {changingHotbar=false;}
     }
-    private void CategoryTree_Changed(object sender, RoutedPropertyChangedEventArgs<object> e) { if (!changingTree && CategoryTree.SelectedItem is TreeViewItem item) { selectedCategory = (string)item.Tag; view?.Refresh(); UpdateCategoryInformation(); } }
-    private void Search_Changed(object sender, TextChangedEventArgs e) { view?.Refresh(); UpdateCategoryInformation(); }
+    private void CategoryTree_Changed(object sender, RoutedPropertyChangedEventArgs<object> e) { if (!changingTree && e.NewValue is TreeViewItem item) { selectedCategory = (string)item.Tag; view?.Refresh();UpdateSearchResults(); UpdateCategoryInformation(); } }
+    private void Search_Changed(object sender, TextChangedEventArgs e) { UpdateSearchResults(); }
     private void HotbarPage_Changed(object sender, SelectionChangedEventArgs e) { if (initialized) {RefreshHotbar();Notify("page-"+(HotbarPage.SelectedIndex+1));} }
     private void SoundGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateCategoryInformation();
     private async void SoundGrid_PlayMouseDown(object sender, MouseButtonEventArgs e)
