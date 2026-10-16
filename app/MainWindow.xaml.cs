@@ -409,7 +409,7 @@ public partial class MainWindow : Window
     }
 
     private void NewList_Click(object sender, RoutedEventArgs e) { library.New(); playingEntry = null; selectedCategory = "*"; RefreshLibrary(); }
-    private void OpenList_Click(object sender, RoutedEventArgs e) => Guard(() => { var dialog = new OpenFileDialog { Filter = "Sound library (*.json)|*.json|All files|*.*" }; if (dialog.ShowDialog(this) == true) { library.Load(dialog.FileName); AddRecent(dialog.FileName); RefreshLibrary(); } });
+    private void OpenList_Click(object sender, RoutedEventArgs e) => Guard(() => { var dialog = new OpenFileDialog { Filter = "Sound lists (*.spl)|*.spl|Sound library (*.json)|*.json|All files|*.*", FilterIndex = 1, DefaultExt = ".spl" }; if (dialog.ShowDialog(this) == true) { library.Load(dialog.FileName); AddRecent(dialog.FileName); RefreshLibrary(); } });
     private void SaveList_Click(object sender, RoutedEventArgs e) => Guard(() => { library.Save(); if (library.CurrentPath is { } path) AddRecent(path); Log("Library saved."); });
     private void SaveListAs_Click(object sender, RoutedEventArgs e) => Guard(() => { var dialog = new SaveFileDialog { Filter = "Sound library (*.json)|*.json", FileName = "library.json" }; if (dialog.ShowDialog(this) == true) { library.Save(dialog.FileName); AddRecent(dialog.FileName); } });
     private void AddRecent(string path) { Settings.RecentLists.Remove(path); Settings.RecentLists.Insert(0, path); Settings.RecentLists = Settings.RecentLists.Take(10).ToList(); preferenceStore.Save(); }
@@ -502,7 +502,7 @@ public partial class MainWindow : Window
         if(closing||!Settings.Notifications.TryGetValue(id,out var setting)||!setting.Enabled||string.IsNullOrWhiteSpace(setting.Path))return;
         try{notifications.SpeakerVolume=(float)Settings.SpeakerVolume;await notifications.PlayAsync(setting.Path,PlaybackDestination.Speakers);if(wait)while(notifications.IsPlaying)await Task.Delay(15);}catch(Exception ex){Log("Notification: "+ex.Message);}
     }
-    private void Diagnostics_Click(object sender, RoutedEventArgs e) => Guard(() => { var dialog = new SaveFileDialog { FileName = "soundboard-diagnostics.json", Filter = "Diagnostic report|*.json" }; if (dialog.ShowDialog(this) == true) File.WriteAllText(dialog.FileName, JsonSerializer.Serialize(new { Version = "0.1-test", OS = Environment.OSVersion.ToString(), Devices = audio.Devices, Microphone = audio.GetInjectionStatus(), Settings, Messages = messages.ToArray() }, new JsonSerializerOptions { WriteIndented = true })); });
+    private void Diagnostics_Click(object sender, RoutedEventArgs e) => Guard(() => { var dialog = new SaveFileDialog { FileName = "soundboard-diagnostics.json", Filter = "Diagnostic report|*.json" }; if (dialog.ShowDialog(this) == true) File.WriteAllText(dialog.FileName, JsonSerializer.Serialize(new { Version = AppVersion.Current, OS = Environment.OSVersion.ToString(), Devices = audio.Devices, Microphone = audio.GetInjectionStatus(), Settings, Messages = messages.ToArray() }, new JsonSerializerOptions { WriteIndented = true })); });
     private void RefreshStatus()
     {
         if(audio.IsForwarding){MicStatus.Text="Forwarding · "+audio.ForwardingSourceName;MicStatus.ToolTip="Audio forwarding is active. Stop playback or open Preferences → Audio to stop forwarding.";return;}

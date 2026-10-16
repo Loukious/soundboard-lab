@@ -136,7 +136,7 @@ public partial class MainWindow
         HotbarPanel.Visibility=Settings.ShowHotbar?Visibility.Visible:Visibility.Collapsed;
         if(initialized)preferenceStore.Save();
     }
-    private void About_Click(object sender, RoutedEventArgs e) => Dialogs.ShowText(this, "About Soundboard Lab", "Soundboard Lab\nIndependent development preview\n\nSoundpad-style controls and workflows, with an independent playback engine and capture mixer.");
+    private void About_Click(object sender, RoutedEventArgs e) => Dialogs.ShowText(this, "About Soundboard Lab", $"Soundboard Lab {AppVersion.Current}\nIndependent development release\n\nSoundpad-style controls and workflows, with an independent playback engine and capture mixer.");
     private void UpdateCategoryInformation()
     {
         if (CategoryNameLabel is null || view is null) return;

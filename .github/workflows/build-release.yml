@@ -75,7 +75,8 @@ jobs:
           SOURCE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          printf 'Portable Windows x64 build from commit `%s`.\n\n' "$SOURCE_SHA" > release-notes.md
+          cat release/release-notes.md > release-notes.md
+          printf '\n\nPortable Windows x64 build from commit `%s`.\n\n' "$SOURCE_SHA" >> release-notes.md
           printf 'Extract the ZIP and run `SoundboardLab.exe`. The .NET runtime is included.\n\n' >> release-notes.md
           printf 'Includes foreground-app and whole-PC audio forwarding with toggle and push-to-forward hotkeys in Preferences. Microphone mixing requires device setup; this development build is unsigned.\n\n' >> release-notes.md
           printf 'CI validates offline audio processing, native callbacks, services and hidden UI layouts. Physical microphone and live forwarding compatibility require separate checks. Verify the ZIP with `SHA256SUMS.txt`.\n' >> release-notes.md
@@ -97,4 +98,4 @@ jobs:
           else
             gh release create "$tag" --title "$title" --notes-file release-notes.md "${flags[@]}"
           fi
-          gh release upload "$tag" release/* --clobber
+          gh release upload "$tag" release/*.zip release/SHA256SUMS.txt --clobber

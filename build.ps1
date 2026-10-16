@@ -2,6 +2,12 @@
 param([switch]$SkipTests,[switch]$SkipPublish,[switch]$SkipNativeBuild,[switch]$CI,[switch]$RunInteractiveTests,[switch]$RunCommunicationsTests,[string]$LiveMicrophoneEndpointId,[string]$ExpectedHostDllSHA256)
 $ErrorActionPreference='Stop'
 $projectRoot=$PSScriptRoot
+$versionOutput=& dotnet msbuild (Join-Path $projectRoot 'app\SoundboardLab.csproj') -getProperty:Version -nologo
+if($LASTEXITCODE -ne 0){throw 'Could not read the application version.'}
+$version=($versionOutput -join "`n").Trim()
+if($version -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?$'){throw ('Invalid semantic version: '+$version)}
+if($env:GITHUB_REF -like 'refs/tags/v*' -and $env:GITHUB_REF -cne ('refs/tags/v'+$version)){throw ('Release tag must match app version v'+$version)}
+Write-Output ('Building Soundboard Lab '+$version)
 & (Join-Path $projectRoot 'Prepare-Translations.ps1')
 if($LiveMicrophoneEndpointId -and -not $RunInteractiveTests){throw 'Live app verification opens windows; specify -RunInteractiveTests explicitly to run it.'}
 $artifactRoot=Join-Path $projectRoot 'artifacts'
@@ -54,10 +60,10 @@ if(-not $SkipPublish) {
         $microphoneVerified=$true
         Copy-Item -LiteralPath (Join-Path $projectRoot 'tests\live\app-latest-summary.json') -Destination (Join-Path $package 'microphone-validation.json')
     }
-    Copy-Item -LiteralPath (Join-Path $projectRoot 'README.md'),(Join-Path $projectRoot 'FEATURES.md'),(Join-Path $projectRoot 'PREFERENCES.md'),(Join-Path $projectRoot 'VALIDATION.md'),(Join-Path $projectRoot 'Remote.ps1') -Destination $package
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'README.md'),(Join-Path $projectRoot 'CHANGELOG.md'),(Join-Path $projectRoot 'FEATURES.md'),(Join-Path $projectRoot 'PREFERENCES.md'),(Join-Path $projectRoot 'VALIDATION.md'),(Join-Path $projectRoot 'Remote.ps1') -Destination $package
     Copy-Item -LiteralPath (Join-Path $projectRoot 'THIRD-PARTY-NOTICES.md') -Destination $package
     Copy-Item -LiteralPath (Join-Path $projectRoot 'docs') -Destination $package -Recurse -Force
-    $info=[ordered]@{Version='0.1-development-preview';CreatedUtc=[DateTime]::UtcNow.ToString('o');Architecture='win-x64';SelfContained=$true;TestsExecuted=(-not $SkipTests);HeadlessControlsVerified=(-not $SkipTests);HardwarePlaybackTestsExecuted=((-not $SkipTests) -and -not $CI);CIBuild=[bool]$CI;Commit=$env:GITHUB_SHA;HeadlessControlsScope=$(if($CI){'layout-only'}else{'playback-and-layout'});InteractiveTestsExecuted=((-not $SkipTests) -and [bool]$RunInteractiveTests);CommunicationsTestsExecuted=((-not $SkipTests) -and [bool]$RunCommunicationsTests);NativeBuildReused=[bool]$SkipNativeBuild;PublishedSmokeVerified=$smokeVerified;MicrophoneServiceIntegrationVerified=$microphoneVerified;MicrophoneVerifiedEndpoint=$(if($microphoneVerified){$LiveMicrophoneEndpointId}else{$null});GoalComplete=$false}
+    $info=[ordered]@{Version=$version;CreatedUtc=[DateTime]::UtcNow.ToString('o');Architecture='win-x64';SelfContained=$true;TestsExecuted=(-not $SkipTests);HeadlessControlsVerified=(-not $SkipTests);HardwarePlaybackTestsExecuted=((-not $SkipTests) -and -not $CI);CIBuild=[bool]$CI;Commit=$env:GITHUB_SHA;HeadlessControlsScope=$(if($CI){'layout-only'}else{'playback-and-layout'});InteractiveTestsExecuted=((-not $SkipTests) -and [bool]$RunInteractiveTests);CommunicationsTestsExecuted=((-not $SkipTests) -and [bool]$RunCommunicationsTests);NativeBuildReused=[bool]$SkipNativeBuild;PublishedSmokeVerified=$smokeVerified;MicrophoneServiceIntegrationVerified=$microphoneVerified;MicrophoneVerifiedEndpoint=$(if($microphoneVerified){$LiveMicrophoneEndpointId}else{$null});GoalComplete=$false}
     $info | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $package 'build-info.json') -Encoding utf8
     $manifestPath=Join-Path $package 'sha256.json'
     $hashes=Get-ChildItem -LiteralPath $package -File -Recurse | Where-Object {$_.FullName -ne $manifestPath} | ForEach-Object { [pscustomobject]@{Path=$_.FullName.Substring($package.Length+1);SHA256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash} }

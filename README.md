@@ -29,12 +29,12 @@ A Windows soundboard with global hotkeys, categories, a waveform editor, and aud
 
 ## Download
 
-Download **SoundboardLab-windows-x64.zip** from the [latest development preview](https://github.com/Loukious/soundboard-lab/releases/tag/preview), extract the entire archive, and run **SoundboardLab.exe**. The .NET runtime is included; keep its accompanying DLLs and installer scripts together.
+Download **SoundboardLab-0.1.0-windows-x64.zip** from the [latest numbered release](https://github.com/Loukious/soundboard-lab/releases/latest), extract the entire archive, and run **SoundboardLab.exe**. The .NET runtime is included; keep its accompanying DLLs and installer scripts together. Builds from `main` are also available in the [development preview](https://github.com/Loukious/soundboard-lab/releases/tag/preview).
 
 The release includes `SHA256SUMS.txt`. Check your download with:
 
 ```powershell
-Get-FileHash .\SoundboardLab-windows-x64.zip -Algorithm SHA256
+Get-FileHash .\SoundboardLab-0.1.0-windows-x64.zip -Algorithm SHA256
 ```
 
 Requires Windows x64 with working Windows audio services/codecs. Audio forwarding requires **Windows build 20348 or later**, including Windows 11. Speech generation needs an installed SAPI voice. Public builds use English UI strings and synthesize notification cues and activation noise on first launch.
@@ -114,7 +114,8 @@ Original binaries, external translation/notification resources, user libraries, 
 [Build and release](.github/workflows/build-release.yml) runs on `main` pushes, pull requests, `v*` tags, and manual dispatch:
 
 - Successful `main` builds update the **preview** prerelease and its downloadable ZIP/checksum.
-- A tag such as `v0.1.0` creates a versioned release; tags containing a hyphen, such as `v0.1.0-preview.1`, create prereleases.
+- Numbered releases use `vMAJOR.MINOR.PATCH` tags, starting with **v0.1.0**. Before 1.0, minor versions introduce features and patch versions contain fixes. A suffix such as `-rc.1` creates a prerelease.
+- The version in `app/SoundboardLab.csproj` is the source for the app, diagnostics, build metadata, and `SoundboardLab-<version>-windows-x64.zip` filename. Tagged builds fail if the tag does not match it. Each release needs a matching entry in [CHANGELOG.md](CHANGELOG.md), which supplies its release notes.
 - Pull requests build and test without publishing.
 
 The workflow uses GitHub's built-in token; no personal token or repository secret is required. ZIP packaging is a separate CI step, keeping local `build.ps1` behavior unchanged.
