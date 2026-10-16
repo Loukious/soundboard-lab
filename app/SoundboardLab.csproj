@@ -14,6 +14,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Resource Include="assets\app-icon.ico" />
+    <Resource Include="assets\headphones-empty.ico" />
     <Content Include="assets\app-icon.ico" CopyToOutputDirectory="PreserveNewest" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="NAudio.Vorbis" Version="1.5.0" />

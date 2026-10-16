@@ -13,3 +13,5 @@ Soundboard Lab uses the following packages. Their license notices are retained i
 | Self-contained .NET runtime | Selected .NET 10 servicing release | [Source](https://github.com/dotnet/runtime), [MIT notice](docs/licenses/dotnet.txt), [third-party notices](docs/licenses/dotnet-runtime-third-party.txt) |
 
 The project uses Windows WASAPI, COM/APO and SAPI APIs. Public releases contain no original application executable, DLL, demo audio, notification recordings or external translation catalog. Notification and activation sounds are generated from this project's source at first launch. README screenshots use generated audio and a demonstration library.
+
+The speaker-volume headphones artwork is copied from the reference application's embedded icon resource. Its source identity and rendering details are recorded in [Speaker-volume artwork](docs/reference-volume-icon.md).
