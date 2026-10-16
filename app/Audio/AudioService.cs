@@ -59,6 +59,7 @@ public sealed partial class AudioService : IDisposable
     public bool IsPlaying => playing && !paused;
     public bool IsPaused => playing && paused;
     public float SpeakerVolume { get => speakerVolume; set {speakerVolume=ValidateGain(value);ApplicationVolume?.TrySetVolume(Math.Clamp(value,0,1));} }
+    internal void SynchronizeSpeakerVolume(float value)=>speakerVolume=ValidateGain(value);
     public float ClipVolume { get => clipVolume; set { clipVolume = ValidateGain(value); UpdateControls(); } }
     public float MicrophoneGain { get => microphoneGain; set { microphoneGain = ValidateGain(value); UpdateControls(); } }
     public bool BlockVoice { get => blockVoice; set { blockVoice = value; UpdateControls(); } }

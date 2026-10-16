@@ -210,7 +210,12 @@ internal static class Program
         speaker.Value=0;await Layout();var muteGlyph=Field<System.Windows.Shapes.Path>(window,"SpeakerMuteGlyph");
         Check(muteGlyph.Visibility==Visibility.Visible&&muteGlyph.Stroke is SolidColorBrush {Color:{R:221,G:32,B:32}},"zero speaker volume displays a red cross inside the headphones");
         speaker.Value=.5;await Layout();Check(muteGlyph.Visibility==Visibility.Collapsed,"restoring speaker volume removes the headphones mute cross");
-        settings.LinearVolumeSlider=false;speaker.Value=.5;Check(((ToolTip)speaker.ToolTip).Content as string=="25%","nonlinear slider feedback displays the applied gain");settings.LinearVolumeSlider=true;speaker.Value=0;clip.Value=1;
+        speaker.Value=.4;settings.LinearVolumeSlider=false;speaker.Value=.5;Check(((ToolTip)speaker.ToolTip).Content as string=="25%","nonlinear slider feedback displays the applied gain");settings.LinearVolumeSlider=true;speaker.Value=0;clip.Value=1;
+        foreach(float level in new[]{.2f,.4f,.7f}){
+            Invoke(window,"ApplyApplicationVolume",level);
+            Check(Math.Abs(speaker.Value-level)<.0001&&Math.Abs(settings.SpeakerVolume-level)<.0001&&Field<AudioService>(window,"audio").SpeakerVolume==level,"incoming Mixer level updates the slider, saved gain, and audio state at "+level);
+        }
+        settings.LinearVolumeSlider=false;Invoke(window,"ApplyApplicationVolume",.25f);Check(Math.Abs(speaker.Value-.5)<.0001,"incoming Mixer gain respects the nonlinear volume setting");settings.LinearVolumeSlider=true;speaker.Value=0;
         bool initialized=Field<bool>(window,"initialized");typeof(MainWindow).GetField("initialized",Private)!.SetValue(window,false);
         try{
             foreach(string name in new[]{"HotkeysBox","AutoKeysBox"}){

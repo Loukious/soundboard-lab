@@ -103,7 +103,7 @@ public partial class MainWindow : Window
         hotkeys.Triggered += action => Dispatcher.BeginInvoke(async () => await HandleActionAsync(action,true));
         hotkeys.Error += ex => Dispatcher.BeginInvoke(() => Log(ex.Message));
         remote.RequestReceived += json => Dispatcher.InvokeAsync(() => HandleRemoteAsync(json)).Task.Unwrap();
-        statusTimer.Interval=TimeSpan.FromMilliseconds(100);statusTimer.Tick += (_, _) => {foregroundAudioTarget.Observe();if(++statusTicks%10==0){RefreshStatus();UpdateDucking();SynchronizeApplicationVolume();}};
+        statusTimer.Interval=TimeSpan.FromMilliseconds(100);statusTimer.Tick += (_, _) => {foregroundAudioTarget.Observe();if(++statusTicks%10==0){RefreshStatus();UpdateDucking();}};
         StateChanged+=MainWindow_StateChanged;
         PreviewTextInput+=(_,e)=>{if(e.OriginalSource is TextBox||string.IsNullOrWhiteSpace(e.Text))return;if(Settings.TypingPrefersTts&&OwnedWindows.OfType<SpeechWindow>().FirstOrDefault() is {} speech){speech.AppendText(e.Text);e.Handled=true;}else if(Settings.TypingBeginsSearch){SearchPanel.Visibility=Visibility.Visible;SearchBox.Focus();SearchBox.Text+=e.Text;SearchBox.CaretIndex=SearchBox.Text.Length;e.Handled=true;}};
         saveTimer.Tick += (_, _) => { try { preferenceStore.Save(); } catch (Exception ex) { Log(ex.Message); } };
@@ -367,7 +367,12 @@ public partial class MainWindow : Window
         if(audio.IsPlaying||audio.IsPaused)SeekToPointer(e,true);
         seekingWithMouse=false;SeekSlider.ReleaseMouseCapture();e.Handled=true;
     }
-    private void Volume_Changed(object sender, RoutedPropertyChangedEventArgs<double> e) { if (!initialized) return;Settings.SpeakerVolume=Settings.LinearVolumeSlider?SpeakerSlider.Value:SpeakerSlider.Value*SpeakerSlider.Value;Settings.ClipVolume=Settings.LinearVolumeSlider?ClipSlider.Value:ClipSlider.Value*ClipSlider.Value/2;audio.SpeakerVolume=(float)Settings.SpeakerVolume;audio.ClipVolume=(float)Settings.ClipVolume;}
+    private void Volume_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if(!initialized||synchronizingApplicationVolume)return;
+        if(ReferenceEquals(sender,SpeakerSlider)){Settings.SpeakerVolume=Settings.LinearVolumeSlider?SpeakerSlider.Value:SpeakerSlider.Value*SpeakerSlider.Value;audio.SpeakerVolume=(float)Settings.SpeakerVolume;}
+        else if(ReferenceEquals(sender,ClipSlider)){Settings.ClipVolume=Settings.LinearVolumeSlider?ClipSlider.Value:ClipSlider.Value*ClipSlider.Value/2;audio.ClipVolume=(float)Settings.ClipVolume;}
+    }
     private void PlaybackOptions_Changed(object sender, RoutedEventArgs e) { if (initialized) { Settings.Repeat = RepeatBox.IsChecked == true; Settings.ContinuePlayback = ContinueBox.IsChecked == true; } }
     private void Destination_Changed(object sender, SelectionChangedEventArgs e) { if(ModeButton is not null){ModeButton.ToolTip="Play mode: "+Destination+". Click to choose.";if(PlayModeGlyph is not null)PlayModeGlyph.Data=(Geometry)FindResource(Destination==PlaybackDestination.Speakers?"HeadphonesIcon":Destination==PlaybackDestination.Microphone?"MicIcon":"PlayIcon");} if (initialized) {Settings.DefaultPlaybackMode = Destination.ToString();} }
     private void BlockVoice_Changed(object sender, RoutedEventArgs e) { if (initialized) audio.BlockVoice = Settings.BlockVoice = BlockVoiceBox.IsChecked == true; }

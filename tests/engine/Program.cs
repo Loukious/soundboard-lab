@@ -15,10 +15,17 @@ try
     using(var appVolume=new ApplicationSessionVolume(_=>[foreignSession,ownSession,systemSession])){
         Check(appVolume.TryAttach("fake-render")&&appVolume.TrySetVolume(.25f)&&ownSession.StoredVolume==.25f,"application volume targets the current process's mixer session");
         Check(foreignSession.Reads==0&&foreignSession.Writes==0&&foreignSession.StoredVolume==.7f&&systemSession.Reads==0&&systemSession.Writes==0&&systemSession.StoredVolume==.6f,"foreign and system sessions are rejected before any volume read or write");
-        ownSession.StoredVolume=.62f;Check(appVolume.TryGetVolume(out float changed)&&changed==.62f,"volume changes made in Windows Mixer can be read back into the app");
+        var feedback=new List<float>();int writesBeforeFeedback=ownSession.Writes;
+        appVolume.VolumeChanged+=(_,_)=>{if(appVolume.TryGetVolume(out var level))feedback.Add(level);};
+        foreach(float level in new[]{.12f,.34f,.62f})ownSession.ChangeFromMixer(level);
+        Check(feedback.SequenceEqual(new[]{.12f,.34f,.62f})&&ownSession.Writes==writesBeforeFeedback,"every intermediate Mixer change emits feedback without a polling delay or volume writeback");
+        Check(foreignSession.Subscribers==0&&systemSession.Subscribers==0,"foreign and system mixer sessions never receive notification subscriptions");
+        Check(appVolume.TryGetVolume(out float changed)&&changed==.62f,"volume changes made in Windows Mixer can be read back into the app");
         var previousVolume=AudioService.ApplicationVolume;
         try{
             AudioService.ApplicationVolume=appVolume;using var volumeService=new AudioService();volumeService.SpeakerVolume=.25f;volumeService.ClipVolume=.5f;volumeService.AttachSpeakerSession("fake-render");
+            int writesBeforeSync=ownSession.Writes;volumeService.SynchronizeSpeakerVolume(.4f);
+            Check(volumeService.SpeakerVolume==.4f&&ownSession.Writes==writesBeforeSync,"accepting incoming Mixer volume changes the audio state without writing back to Windows");volumeService.SpeakerVolume=.25f;
             var buffer=new BufferedWaveProvider(WaveFormat.CreateIeeeFloatWaveFormat(48000,2));var provider=new PlaybackGainProvider(buffer,()=>volumeService.SpeakerPcmGain);var bytes=new byte[8];
             provider.Restart([1,-1],0,1);provider.Read(bytes,0,8);
             Check(MemoryMarshal.Cast<byte,float>(bytes).SequenceEqual(new float[]{.5f,-.5f})&&ownSession.StoredVolume==.25f,"session-controlled speaker gain is applied once while clip gain stays in PCM");
@@ -26,11 +33,24 @@ try
             Check(MemoryMarshal.Cast<byte,float>(bytes).SequenceEqual(new float[]{.125f,-.125f}),"unattached players keep their isolated PCM volume fallback");
         }finally{AudioService.ApplicationVolume=previousVolume;}
     }
+    Check(ownSession.Subscribers==0,"disposing the volume controller unregisters its mixer notifications");
     if(args.Contains("--session-volume")){
         using var sessionDevices=new NAudio.CoreAudioApi.MMDeviceEnumerator();using var sessionOutput=sessionDevices.GetDefaultAudioEndpoint(NAudio.CoreAudioApi.DataFlow.Render,NAudio.CoreAudioApi.Role.Multimedia);
         float endpointLevel=sessionOutput.AudioEndpointVolume.MasterVolumeLevelScalar;bool endpointMute=sessionOutput.AudioEndpointVolume.Mute;
         using var windowsVolume=new ApplicationSessionVolume();windowsVolume.Start(sessionOutput.ID,0);
         Check(windowsVolume.TrySetVolume(.37f)&&windowsVolume.TryGetVolume(out float mixerLevel)&&Math.Abs(mixerLevel-.37f)<.001,"the silent test process's real Windows Mixer session follows its requested volume");
+        var sessionManager=sessionOutput.AudioSessionManager;sessionManager.RefreshSessions();
+        NAudio.CoreAudioApi.AudioSessionControl? externalView=null;
+        for(int i=0;i<sessionManager.Sessions.Count;i++){var candidate=sessionManager.Sessions[i];if(candidate.GetProcessID==(uint)Environment.ProcessId&&externalView is null)externalView=candidate;else candidate.Dispose();}
+        using(externalView){
+            Check(externalView is not null,"notification fixture locates only this silent test process's session");
+            foreach(float level in new[]{.19f,.43f,.71f,.28f}){
+                var notified=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                EventHandler changedHandler=(_,_)=>notified.TrySetResult();windowsVolume.VolumeChanged+=changedHandler;
+                try{externalView!.SimpleAudioVolume.Volume=level;await notified.Task.WaitAsync(TimeSpan.FromSeconds(3));Check(windowsVolume.TryGetVolume(out var readback)&&Math.Abs(readback-level)<.001,"real Core Audio notification delivers intermediate volume "+level);}
+                finally{windowsVolume.VolumeChanged-=changedHandler;}
+            }
+        }
         Check(Math.Abs(sessionOutput.AudioEndpointVolume.MasterVolumeLevelScalar-endpointLevel)<.00001&&sessionOutput.AudioEndpointVolume.Mute==endpointMute,"session volume changes leave the Windows endpoint volume and mute state unchanged");
     }
     var bounded=new StereoFrameBuffer(3);bounded.Write([1,2,3,4,5,6]);bounded.Write([7,8],keepNewest:true);var buffered=new float[6];bounded.Read(buffered);
@@ -258,6 +278,9 @@ finally { Directory.Delete(temp, true); }
 
 internal sealed class FakeAppAudioSession(uint processId,float volume) : IAppAudioSession
 {
+    public event EventHandler? VolumeChanged;
+    internal int Subscribers=>VolumeChanged?.GetInvocationList().Length??0;
+    internal void ChangeFromMixer(float value){StoredVolume=value;VolumeChanged?.Invoke(this,EventArgs.Empty);}
     internal float StoredVolume=volume;
     internal int Reads,Writes;
     public uint ProcessId=>processId;
