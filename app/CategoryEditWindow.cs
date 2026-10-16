@@ -47,7 +47,7 @@ internal sealed class CategoryEditWindow : Window
         var body=new StackPanel();root.Children.Add(body);
         StackPanel Group(string title){var panel=new StackPanel();body.Children.Add(new GroupBox {Header=new TextBlock {Text=title,FontWeight=FontWeights.Bold,FontSize=16,Foreground=Brushes.Black},Margin=new(0,0,0,10),Padding=new(8,5,8,7),Content=panel});return panel;}
         var group=Group("Name");var name=new TextBox {Text=Value.Name.Split('/').Last()};AutomationProperties.SetAutomationId(name,"CategoryEditName");group.Children.Add(name);
-        group=Group("Icon");var icons=new Grid();icons.ColumnDefinitions.Add(new(){Width=new(74)});icons.ColumnDefinitions.Add(new(){Width=new(54)});icons.ColumnDefinitions.Add(new(){Width=new(1,GridUnitType.Star)});group.Children.Add(icons);
+        group=Group("Icon");var icons=new Grid();icons.ColumnDefinitions.Add(new(){Width=GridLength.Auto,MinWidth=96});icons.ColumnDefinitions.Add(new(){Width=new(54)});icons.ColumnDefinitions.Add(new(){Width=new(1,GridUnitType.Star)});group.Children.Add(icons);
         var modes=new StackPanel();icons.Children.Add(modes);var image=new ContentControl {Width=48,Height=48};Grid.SetColumn(image,1);icons.Children.Add(image);
         var choices=new StackPanel();Grid.SetColumn(choices,2);icons.Children.Add(choices);
         void Preview()=>image.Content=CategoryIcons.Create(Value,name.Text,48,(Brush)Application.Current.FindResource("Accent"));
