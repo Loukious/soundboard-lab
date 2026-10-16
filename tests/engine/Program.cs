@@ -9,6 +9,30 @@ int assertions = 0;
 try
 {
     void Check(bool value, string name) { if (!value) throw new Exception(name); assertions++; Console.WriteLine("PASS " + name); }
+    var ownSession=new FakeAppAudioSession((uint)Environment.ProcessId,.8f);
+    var foreignSession=new FakeAppAudioSession((uint)Environment.ProcessId+1,.7f);
+    var systemSession=new FakeAppAudioSession(0,.6f);
+    using(var appVolume=new ApplicationSessionVolume(_=>[foreignSession,ownSession,systemSession])){
+        Check(appVolume.TryAttach("fake-render")&&appVolume.TrySetVolume(.25f)&&ownSession.StoredVolume==.25f,"application volume targets the current process's mixer session");
+        Check(foreignSession.Reads==0&&foreignSession.Writes==0&&foreignSession.StoredVolume==.7f&&systemSession.Reads==0&&systemSession.Writes==0&&systemSession.StoredVolume==.6f,"foreign and system sessions are rejected before any volume read or write");
+        ownSession.StoredVolume=.62f;Check(appVolume.TryGetVolume(out float changed)&&changed==.62f,"volume changes made in Windows Mixer can be read back into the app");
+        var previousVolume=AudioService.ApplicationVolume;
+        try{
+            AudioService.ApplicationVolume=appVolume;using var volumeService=new AudioService();volumeService.SpeakerVolume=.25f;volumeService.ClipVolume=.5f;volumeService.AttachSpeakerSession("fake-render");
+            var buffer=new BufferedWaveProvider(WaveFormat.CreateIeeeFloatWaveFormat(48000,2));var provider=new PlaybackGainProvider(buffer,()=>volumeService.SpeakerPcmGain);var bytes=new byte[8];
+            provider.Restart([1,-1],0,1);provider.Read(bytes,0,8);
+            Check(MemoryMarshal.Cast<byte,float>(bytes).SequenceEqual(new float[]{.5f,-.5f})&&ownSession.StoredVolume==.25f,"session-controlled speaker gain is applied once while clip gain stays in PCM");
+            AudioService.ApplicationVolume=null;volumeService.AttachSpeakerSession("pcm-fallback");provider.Restart([1,-1],0,1);provider.Read(bytes,0,8);
+            Check(MemoryMarshal.Cast<byte,float>(bytes).SequenceEqual(new float[]{.125f,-.125f}),"unattached players keep their isolated PCM volume fallback");
+        }finally{AudioService.ApplicationVolume=previousVolume;}
+    }
+    if(args.Contains("--session-volume")){
+        using var sessionDevices=new NAudio.CoreAudioApi.MMDeviceEnumerator();using var sessionOutput=sessionDevices.GetDefaultAudioEndpoint(NAudio.CoreAudioApi.DataFlow.Render,NAudio.CoreAudioApi.Role.Multimedia);
+        float endpointLevel=sessionOutput.AudioEndpointVolume.MasterVolumeLevelScalar;bool endpointMute=sessionOutput.AudioEndpointVolume.Mute;
+        using var windowsVolume=new ApplicationSessionVolume();windowsVolume.Start(sessionOutput.ID,0);
+        Check(windowsVolume.TrySetVolume(.37f)&&windowsVolume.TryGetVolume(out float mixerLevel)&&Math.Abs(mixerLevel-.37f)<.001,"the silent test process's real Windows Mixer session follows its requested volume");
+        Check(Math.Abs(sessionOutput.AudioEndpointVolume.MasterVolumeLevelScalar-endpointLevel)<.00001&&sessionOutput.AudioEndpointVolume.Mute==endpointMute,"session volume changes leave the Windows endpoint volume and mute state unchanged");
+    }
     var bounded=new StereoFrameBuffer(3);bounded.Write([1,2,3,4,5,6]);bounded.Write([7,8],keepNewest:true);var buffered=new float[6];bounded.Read(buffered);
     Check(buffered.SequenceEqual(new float[]{3,4,5,6,7,8}),"live capture drops stale stereo frames instead of accumulating latency");
     bounded.Write([float.NaN,float.PositiveInfinity]);bounded.Read(buffered);Check(buffered.All(x=>x==0),"live capture sanitizes nonfinite samples and zero-fills underflow");
@@ -231,3 +255,13 @@ try
     Console.WriteLine($"PASS {assertions} assertions. No microphone capture was started.");
 }
 finally { Directory.Delete(temp, true); }
+
+internal sealed class FakeAppAudioSession(uint processId,float volume) : IAppAudioSession
+{
+    internal float StoredVolume=volume;
+    internal int Reads,Writes;
+    public uint ProcessId=>processId;
+    public float Volume {get{Reads++;return StoredVolume;}set{Writes++;StoredVolume=value;}}
+    public bool Mute {get;set;}
+    public void Dispose(){}
+}

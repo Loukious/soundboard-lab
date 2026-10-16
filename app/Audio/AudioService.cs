@@ -6,6 +6,10 @@ namespace SoundboardLab.Audio;
 
 public sealed partial class AudioService : IDisposable
 {
+    internal static IApplicationSessionVolume? ApplicationVolume {get;set;}
+    private bool speakerUsesSessionVolume;
+    internal float SpeakerPcmGain=>(speakerUsesSessionVolume?1:speakerVolume)*clipVolume;
+    internal void AttachSpeakerSession(string endpointId)=>speakerUsesSessionVolume=ApplicationVolume?.TryAttach(endpointId)==true;
     private readonly object gate = new();
     private readonly SemaphoreSlim transition = new(1, 1);
     private readonly PlaybackCache cache = new();
@@ -54,7 +58,7 @@ public sealed partial class AudioService : IDisposable
     public TimeSpan Position { get { lock (gate) return TimeSpan.FromSeconds(CurrentFrame() / 48000d); } }
     public bool IsPlaying => playing && !paused;
     public bool IsPaused => playing && paused;
-    public float SpeakerVolume { get => speakerVolume; set => speakerVolume = ValidateGain(value); }
+    public float SpeakerVolume { get => speakerVolume; set {speakerVolume=ValidateGain(value);ApplicationVolume?.TrySetVolume(Math.Clamp(value,0,1));} }
     public float ClipVolume { get => clipVolume; set { clipVolume = ValidateGain(value); UpdateControls(); } }
     public float MicrophoneGain { get => microphoneGain; set { microphoneGain = ValidateGain(value); UpdateControls(); } }
     public bool BlockVoice { get => blockVoice; set { blockVoice = value; UpdateControls(); } }
@@ -126,10 +130,11 @@ public sealed partial class AudioService : IDisposable
             {
                 speakerBuffer = new BufferedWaveProvider(WaveFormat.CreateIeeeFloatWaveFormat(48000, 2))
                 { BufferDuration = TimeSpan.FromMilliseconds(500), ReadFully = true, DiscardOnBufferOverflow = false };
-                counter = new PlaybackGainProvider(speakerBuffer, () => speakerVolume * clipVolume);
+                counter = new PlaybackGainProvider(speakerBuffer, () => SpeakerPcmGain);
                 using var device = GetOutputDevice();
                 player = new WasapiOut(device, AudioClientShareMode.Shared, true, RenderLatencyMs);
                 player.Init(counter);
+                AttachSpeakerSession(device.ID);
                 player.PlaybackStopped += (_, e) => { if (e.Exception is not null) ReportError(e.Exception); };
             }
             if (nativeOpened) { StopNativeClients(); UpdateControls(); }

@@ -103,7 +103,7 @@ public partial class MainWindow : Window
         hotkeys.Triggered += action => Dispatcher.BeginInvoke(async () => await HandleActionAsync(action,true));
         hotkeys.Error += ex => Dispatcher.BeginInvoke(() => Log(ex.Message));
         remote.RequestReceived += json => Dispatcher.InvokeAsync(() => HandleRemoteAsync(json)).Task.Unwrap();
-        statusTimer.Interval=TimeSpan.FromMilliseconds(100);statusTimer.Tick += (_, _) => {foregroundAudioTarget.Observe();if(++statusTicks%10==0){RefreshStatus();UpdateDucking();}};
+        statusTimer.Interval=TimeSpan.FromMilliseconds(100);statusTimer.Tick += (_, _) => {foregroundAudioTarget.Observe();if(++statusTicks%10==0){RefreshStatus();UpdateDucking();SynchronizeApplicationVolume();}};
         StateChanged+=MainWindow_StateChanged;
         PreviewTextInput+=(_,e)=>{if(e.OriginalSource is TextBox||string.IsNullOrWhiteSpace(e.Text))return;if(Settings.TypingPrefersTts&&OwnedWindows.OfType<SpeechWindow>().FirstOrDefault() is {} speech){speech.AppendText(e.Text);e.Handled=true;}else if(Settings.TypingBeginsSearch){SearchPanel.Visibility=Visibility.Visible;SearchBox.Focus();SearchBox.Text+=e.Text;SearchBox.CaretIndex=SearchBox.Text.Length;e.Handled=true;}};
         saveTimer.Tick += (_, _) => { try { preferenceStore.Save(); } catch (Exception ex) { Log(ex.Message); } };
@@ -121,7 +121,7 @@ public partial class MainWindow : Window
             RepeatBox.IsChecked = Settings.Repeat; ContinueBox.IsChecked = Settings.ContinuePlayback;
             DestinationBox.SelectedIndex = Settings.DefaultPlaybackMode switch { "Speakers" => 1, "Microphone" => 2, _ => 0 };
             audio.SelectDevices(NullIfEmpty(Settings.CaptureDeviceId), NullIfEmpty(Settings.RenderDeviceId),Settings.CaptureDeviceIds,Settings.DeviceBoosts);
-            audio.SpeakerVolume=(float)Settings.SpeakerVolume;audio.ClipVolume=(float)Settings.ClipVolume;
+            InitializeApplicationVolume();audio.SpeakerVolume=(float)Settings.SpeakerVolume;audio.ClipVolume=(float)Settings.ClipVolume;
             audio.MicrophoneGain = (float)Math.Clamp(Settings.MicrophoneGain, 0, 4); audio.BlockVoice = Settings.BlockVoice;
             initialized = true; RefreshLibrary(); ConfigureHotkeys(); ConfigureAutoKeys();ApplyInterfaceSettings();
             CompositionTarget.Rendering += RenderPlaybackCursor;
@@ -589,7 +589,7 @@ public partial class MainWindow : Window
         if (closing) return;
         if(Settings.MinimizeInsteadOfClose&&!exitRequested&&!arguments.Contains("--smoke-test")){e.Cancel=true;MinimizeWindow();return;}
         e.Cancel = true; closing = true;CancelStatusMenu();tray?.Dispose();
-        try { CompositionTarget.Rendering -= RenderPlaybackCursor; lifetime.Cancel(); statusTimer.Stop(); saveTimer.Stop(); await forwardingController.StopAsync();hotkeys.Dispose(); remote.Dispose(); await StopAsync(); StopMicMonitor(); await audio.StopRecordingAsync(); audio.Dispose(); notifications.Dispose(); autoKeys.Dispose(); preferenceStore.Save(); library.Dispose(); http.Dispose(); lifetime.Dispose(); }
+        try { CompositionTarget.Rendering -= RenderPlaybackCursor; lifetime.Cancel(); statusTimer.Stop(); saveTimer.Stop(); await forwardingController.StopAsync();hotkeys.Dispose(); remote.Dispose(); await StopAsync(); StopMicMonitor(); await audio.StopRecordingAsync(); audio.Dispose(); notifications.Dispose();DisposeApplicationVolume(); autoKeys.Dispose(); preferenceStore.Save(); library.Dispose(); http.Dispose(); lifetime.Dispose(); }
         catch (Exception ex) { File.AppendAllText(Path.Combine(stateDirectory, "errors.log"), ex + "\n"); }
         _ = Dispatcher.BeginInvoke(Close);
     }
