@@ -1,0 +1,48 @@
+# Build products and development environments
+**/bin/
+**/obj/
+/native/build/
+/artifacts/
+/.vs/
+/.vscode/
+*.user
+*.suo
+*.log
+.env
+.env.*
+!.env.example
+
+# Generated catalogs from optional external input; releases use built-in English.
+/app/assets/languages/
+
+# Local captures and historical test data. Only test source and instructions belong in Git.
+/tests/*
+!/tests/*.ps1
+!/tests/*.py
+!/tests/*.md
+!/tests/controls/
+!/tests/engine/
+!/tests/services/
+!/tests/native/
+!/tests/live/
+/tests/controls/*
+!/tests/controls/*.cs
+!/tests/controls/*.csproj
+/tests/engine/*
+!/tests/engine/*.cs
+!/tests/engine/*.csproj
+/tests/services/*
+!/tests/services/*.cs
+!/tests/services/*.csproj
+/tests/native/*
+!/tests/native/*.cpp
+/tests/live/*
+!/tests/live/*.cs
+!/tests/live/*.csproj
+!/tests/live/*.ps1
+!/tests/live/README.md
+
+# Ad-hoc captures at the workspace root
+/preferences-*.png
+/.ci-staging/
+/.screenshot-state/

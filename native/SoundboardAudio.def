@@ -1,0 +1,6 @@
+LIBRARY "SoundboardLab.Audio.dll"
+EXPORTS
+    DllGetClassObject PRIVATE
+    DllCanUnloadNow PRIVATE
+    DllRegisterServer PRIVATE
+    DllUnregisterServer PRIVATE

@@ -1,0 +1,42 @@
+# Validation
+
+[GitHub Actions runs](https://github.com/Loukious/soundboard-lab/actions/workflows/build-release.yml) contain build/test results. Releases include `build-info.json` with the source commit and test scope, and `sha256.json` with file hashes. `SHA256SUMS.txt` verifies the ZIP.
+
+## CI scope
+
+`build.ps1 -CI` runs on Windows x64 without physical audio devices:
+
+| Suite | Coverage |
+|---|---|
+| Native | Actual APO COM callbacks, aggregation/lifetime, gains, voice blocking, pause/stop, formats, queue backpressure, multiple consumers, vendor-effect wrapping, concurrency, cross-process shared memory. |
+| Audio engine, offline | PCM conversion, loudness/normalization, editing, encoding/MP3 bitrates, gain isolation, cursor arithmetic, bounded forwarding queues, independent clip/live gain, clipping, pause and clip completion. |
+| Services | Library recovery/export, persistence, simulated hotkey dispatch/capture/conflicts, Auto Keys, pipes, toggle/hold forwarding, key/modifier release, repeat rejection, cancellation during startup. |
+| WPF, layout-only | Actual hidden controls, hotkey editors, menus, Preferences layouts/dependencies, forwarding controls/default-off state, unshown device setup. No playback/capture. |
+| Installer plan | Pure fixtures preserving/chaining/restoring vendor effects across mode changes, repair, invalid-backup rejection. Scripts are parsed without running setup. |
+| GUI helper | Repeated PowerShell helper loading and refusal to run interactive tests without explicit opt-in. |
+
+CI does not install an APO, restart Windows Audio, change volume, send OS input, or show windows. It skips physical audio endpoints and installed speech voices; successful CI does not claim live microphone/voice-app compatibility.
+
+## Local checks
+
+Default `build.ps1` additionally runs muted WASAPI playback, seeking/retriggering, desktop loopback recording, SAPI synthesis, and hidden playback controls. These tests do not change Windows endpoint/session volume or start physical microphone capture.
+
+Both actual process-loopback capture modes were initialized locally, then stopped without microphone injection:
+
+```powershell
+dotnet run --project tests/engine -- --offline --forwarding-capture
+```
+
+This opt-in capture test targets the test process and writes no recording. The forwarding mixer/state machine/hotkey handling have deterministic tests. Forwarding uses the existing native v1 transport; no native ABI change is required.
+
+## Explicit opt-ins
+
+- `-RunInteractiveTests`: opens/activates windows and sends desktop input.
+- `-RunCommunicationsTests`: can trigger Windows ducking through a communications stream.
+- `tests/live/`: physical capture verification with deliberate endpoint selection/setup.
+
+These are excluded from public CI. Device repair, live mode switching, voice calibration, actual global input delivery, and forwarding into third-party voice apps remain environmental checks.
+
+## Screenshots
+
+`tools/screenshots` renders actual controls with generated audio and a private temporary library. It does not show windows, take focus, send input, or play audio. Screenshots are retained in `docs/screenshots/` and embedded in the README.

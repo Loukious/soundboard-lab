@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0-windows</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+  <ItemGroup><Compile Include="../../app/Models/*.cs" Link="Models/%(Filename)%(Extension)"/><Compile Include="../../app/Services/InstanceLease.cs"/><Compile Include="../../app/Services/LibraryStore.cs"/><Compile Include="../../app/Services/PreferenceStore.cs"/><Compile Include="../../app/Services/GlobalHotkeyService.cs"/><Compile Include="../../app/Services/AutoKeyService.cs"/><Compile Include="../../app/Services/AutoKeyCoordinator.cs"/><Compile Include="../../app/Services/RemoteControlServer.cs"/></ItemGroup>
+  <ItemGroup><Compile Include="../../app/Services/HotkeyCapture.cs"/></ItemGroup>
+  <ItemGroup><Compile Include="../../app/Services/ForwardingController.cs"/></ItemGroup>
+</Project>

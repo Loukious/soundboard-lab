@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PlatformTarget>x64</PlatformTarget>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>SoundboardLab</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>assets\app-icon.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="assets\app-icon.ico" />
+    <Content Include="assets\app-icon.ico" CopyToOutputDirectory="PreserveNewest" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="NAudio.Vorbis" Version="1.5.0" />
+    <PackageReference Include="System.Speech" Version="10.0.0" />
+    <PackageReference Include="Concentus.Oggfile" Version="1.0.7" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\..\sounds\notify\**\*" Link="sounds\notify\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\sounds\white_noise.mp3" Condition="Exists('..\..\sounds\white_noise.mp3')" Link="sounds\white_noise.mp3" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="assets\languages\**\translation.mo" Link="languages\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\native\build\SoundboardLab.Audio.dll" Condition="Exists('..\native\build\SoundboardLab.Audio.dll')" Link="SoundboardLab.Audio.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\installer\*.ps1" Link="installer\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

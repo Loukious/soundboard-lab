@@ -1,0 +1,8 @@
+namespace SoundboardLab;
+
+internal sealed partial class SettingsWindow
+{
+    private const string DynamicNormalizationHelp="This option is best if your sound files have different volume levels.\n\nWhen you play sound files, their volume gets automatically adjusted to the voice volume, that you configured above.\n\nThe sound files are not physically modified.";
+    private const string FixedNormalizationHelp="This option is best if your sound files are already normalized in terms of volume.\n\nWhen you play sound files, their volume gets adjusted by a fixed value, that you can configure below. The value should be your voice volume minus the sound file volume.\nYou can set it by yourself or let it be calculated. The calculation analyzes the sound files of your sound list, takes their average volume level and uses it in the above mentioned formula.\n\nThe sound files are not physically modified.\n\nBenefit: better quality and less performance consumption than the dynamic option, but the files must already be normalized.";
+    private const string VolumeReductionHelp="This option mainly affects browsers and other media players.\n\nIt is the same option that you can apply in Windows audio communication preferences and as such it will also be triggered by communication applications like Skype. It means, that Skype will also reduce other application's sounds.\n\nMost games opt out from it and their volume level is not reduced.\n\nThe volume is changed with a one second fade-out and fade-in effect. So it is recommended to use it with the Karaoke option above with a negative value of 500.";
+}
