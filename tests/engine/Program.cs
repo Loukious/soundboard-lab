@@ -2,6 +2,7 @@ using SoundboardLab.Audio;
 using NAudio.Wave;
 using System.Runtime.InteropServices;
 
+if(args.Contains("--loopback-source-fixture")){await Task.Delay(3000);return;}
 var temp = Path.Combine(Path.GetTempPath(), "SoundboardLab.EngineTests-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(temp);
 int assertions = 0;
@@ -144,6 +145,11 @@ try
             using var captureSource=new ProcessLoopbackSource((uint)Environment.ProcessId,wholePc);await captureSource.StartAsync(timeout.Token);await Task.Delay(100);
             float[] captured=new float[960];captureSource.Read(captured);Check(captureSource.Failure is null,"actual process-loopback capture initializes and stops in "+(wholePc?"exclude-self":"include-self")+" mode without microphone injection");
         }
+        var fixtureStart=new System.Diagnostics.ProcessStartInfo("dotnet"){UseShellExecute=false,CreateNoWindow=true};fixtureStart.ArgumentList.Add(typeof(AudioService).Assembly.Location);fixtureStart.ArgumentList.Add("--loopback-source-fixture");
+        using var fixture=System.Diagnostics.Process.Start(fixtureStart)!;
+        using var sourceExit=new ProcessLoopbackSource((uint)fixture.Id,false);await sourceExit.StartAsync(timeout.Token);await fixture.WaitForExitAsync(timeout.Token);
+        for(int i=0;i<100&&sourceExit.Failure is null;i++)await Task.Delay(20);
+        Check(sourceExit.Failure?.Message=="The source app closed.","foreground capture stops when its original source process exits");
     }
     if(!args.Contains("--offline")){
     var voices = SpeechService.GetVoices(); Check(voices.Count > 0, "Windows SAPI enumerates installed voices");

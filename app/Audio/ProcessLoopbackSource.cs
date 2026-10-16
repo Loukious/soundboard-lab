@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Diagnostics;
 using NAudio.CoreAudioApi;
 using NAudio.CoreAudioApi.Interfaces;
 using NAudio.Wasapi.CoreAudioApi.Interfaces;
@@ -35,6 +36,8 @@ internal sealed class ProcessLoopbackSource(uint processId,bool wholePc):IForwar
         bool initialized=false;
         try{
             Marshal.ThrowExceptionForHR(CoInitializeEx(0,0));initialized=true;
+            using var target=wholePc?null:Process.GetProcessById((int)processId);
+            if(target is not null)_=target.SafeHandle; // Keep the original process identity until capture ends.
             using var client=ActivateAsync(processId,wholePc,stop.Token).GetAwaiter().GetResult();
             using var signal=new AutoResetEvent(false);
             client.Initialize(AudioClientShareMode.Shared,AudioClientStreamFlags.Loopback|AudioClientStreamFlags.EventCallback,0,0,WaveFormat.CreateIeeeFloatWaveFormat(48000,2),Guid.Empty);
@@ -43,6 +46,7 @@ internal sealed class ProcessLoopbackSource(uint processId,bool wholePc):IForwar
             client.Start();ready.TrySetResult();
             try{
                 while(!stop.IsCancellationRequested){
+                    if(target?.HasExited==true)throw new InvalidOperationException("The source app closed.");
                     signal.WaitOne(20);
                     while(!stop.IsCancellationRequested&&capture.GetNextPacketSize()>0){
                         var pointer=capture.GetBuffer(out int frames,out var flags,out _,out _);
