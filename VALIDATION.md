@@ -31,7 +31,7 @@ This opt-in capture test targets the test process and writes no recording. The f
 
 ## Explicit opt-ins
 
-- `dotnet run --project tests/engine -- --offline --session-volume`: starts a silent stream in the test process, changes only that process's Mixer session, and verifies the endpoint volume and mute state remain unchanged. No window, input, audible samples, or capture.
+- `dotnet run --project tests/engine -- --offline --session-volume`: starts a silent stream in the test process, changes only that process's Mixer session, verifies notifications for intermediate volume levels, and verifies the endpoint volume and mute state remain unchanged. No window, input, audible samples, or capture.
 - `-RunInteractiveTests`: opens/activates windows and sends desktop input.
 - `-RunCommunicationsTests`: can trigger Windows ducking through a communications stream.
 - `tests/live/`: physical capture verification with deliberate endpoint selection/setup.

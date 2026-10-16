@@ -54,6 +54,11 @@ internal static class Program
             foreach(var category in library.Document.Categories){category.IconColor=colors[Array.IndexOf(new[]{"Voice","Games","Reactions","Music"},category.Name)%4];}
             Invoke(main,"RefreshLibrary");await Dispatcher.Yield(DispatcherPriority.Background);Field<DataGrid>(main,"SoundGrid").SelectedIndex=0;
             await Save(main,Path.Combine(output,"main-window.png"),1020,660);
+            Field<FrameworkElement>(main,"SearchPanel").Visibility=Visibility.Visible;
+            await Save(main,Path.Combine(output,"search-panel.png"),1020,660);
+            Field<Slider>(main,"SpeakerSlider").Value=0;
+            await Save(main,Path.Combine(output,"muted-speakers.png"),1020,660);
+            Field<Slider>(main,"SpeakerSlider").Value=.75;Field<FrameworkElement>(main,"SearchPanel").Visibility=Visibility.Collapsed;
             var prefs=Field<PreferenceStore>(main,"preferenceStore");prefs.Settings.ShowHotbar=true;Field<FrameworkElement>(main,"HotbarPanel").Visibility=Visibility.Visible;Invoke(main,"RefreshHotbar");
             await Save(main,Path.Combine(output,"hotbar.png"),1020,660);
             var type=typeof(MainWindow).Assembly.GetType("SoundboardLab.SettingsWindow")!;

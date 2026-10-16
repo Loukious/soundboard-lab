@@ -6,6 +6,10 @@ use `v` followed by the app version; prereleases use a suffix such as `-rc.1`.
 
 ## [Unreleased]
 
+- Match the compact right-aligned search strip and its bordered buttons.
+- Put grey volume percentages beneath the pointer and keep dragging outside the slider until release.
+- Update the app slider during Windows Mixer changes through Core Audio notifications, without feedback writes.
+- Show a red cross inside the headphones when speaker volume is zero.
 - Restore incremental search with previous/next buttons, keyboard navigation, numeric index lookup, and reset/close.
 - Show live percentages while adjusting speaker and microphone volume sliders.
 - Synchronize speaker volume with this process's Windows Mixer sessions, without applying speaker gain twice.
