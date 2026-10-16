@@ -204,6 +204,9 @@ internal static class Program
         Check(above>0&&speaker.Value>above,"volume pointer projection continues horizontally far above and below the slider, without injecting mouse input");
         MoveVolume(-500,-200);bool atStart=speaker.Value==0;MoveVolume(track.ActualWidth+500,300);
         Check(atStart&&speaker.Value==1,"captured volume drags clamp at either end outside the track");
+        speaker.Value=0;await Layout();var muteGlyph=Field<System.Windows.Shapes.Path>(window,"SpeakerMuteGlyph");
+        Check(muteGlyph.Visibility==Visibility.Visible&&muteGlyph.Stroke is SolidColorBrush {Color:{R:221,G:32,B:32}},"zero speaker volume displays a red cross inside the headphones");
+        speaker.Value=.5;await Layout();Check(muteGlyph.Visibility==Visibility.Collapsed,"restoring speaker volume removes the headphones mute cross");
         settings.LinearVolumeSlider=false;speaker.Value=.5;Check(((ToolTip)speaker.ToolTip).Content as string=="25%","nonlinear slider feedback displays the applied gain");settings.LinearVolumeSlider=true;speaker.Value=0;clip.Value=1;
         bool initialized=Field<bool>(window,"initialized");typeof(MainWindow).GetField("initialized",Private)!.SetValue(window,false);
         try{
