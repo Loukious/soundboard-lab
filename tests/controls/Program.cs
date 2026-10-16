@@ -68,7 +68,8 @@ internal static class Program
             var grid=Field<DataGrid>(window,"SoundGrid");var volume=Field<Slider>(window,"SpeakerSlider");var engine=Field<AudioService>(window,"audio");
             await CheckMissingSoundsAndColors(window,library,sound,temp);
             await CheckSearchAndCategoryLayout(window,library,sound,temp);
-            if(layoutOnly){CheckHotkeyEditor(window,library,sound);CheckMenusAndSpecialHotkeys(window);CheckPreferencePages(window,temp);Console.WriteLine($"PASS {checks} headless WPF layout checks. No capture, rendering, window activation or OS input.");return;}
+            await CheckPreferenceResponsiveness(window);
+            if(layoutOnly){CheckHotkeyEditor(window,library,sound);CheckMenusAndSpecialHotkeys(window);await CheckPreferencePages(window,temp);Console.WriteLine($"PASS {checks} headless WPF layout checks. No capture, rendering, window activation or OS input.");return;}
             int frameworkDoubleClicks=0;var frameworkControl=new Control();frameworkControl.MouseDoubleClick+=(_,_)=>frameworkDoubleClicks++;
             for(int click=1;click<=20;click++){
                 var press=new MouseButtonEventArgs(Mouse.PrimaryDevice,Environment.TickCount,MouseButton.Left){RoutedEvent=Mouse.MouseDownEvent};
@@ -83,11 +84,11 @@ internal static class Program
                 typeof(MouseButtonEventArgs).GetProperty(nameof(MouseButtonEventArgs.ClickCount))!.SetValue(press,clickCount);
                 cell.RaiseEvent(press);
             }
-            Check(volume.IsMoveToPointEnabled&&volume.LargeChange<volume.Maximum-volume.Minimum,"volume track clicks use the pointed position and a bounded step");
+            Check(!volume.IsMoveToPointEnabled&&volume.LargeChange<volume.Maximum-volume.Minimum,"volume track clicks use the captured absolute-position handler and a bounded keyboard step");
             foreach(double target in new[]{.25,.5,.75}){
                 volume.Value=.5;Layout();var track=(Track)volume.Template.FindName("PART_Track",volume);
                 double x=track.Thumb.ActualWidth/2+(track.ActualWidth-track.Thumb.ActualWidth)*target;
-                volume.Value=track.ValueFromPoint(new Point(x,track.ActualHeight/2));Layout();
+                VolumeSliderFeedback.SetValueFromPointer(volume,track,new Point(x,track.ActualHeight/2));Layout();
                 Check(Math.Abs(volume.Value-target)<.01&&Math.Abs(engine.SpeakerVolume-target)<.01,$"volume track geometry and playback gain preserve {target:P0} positions");
             }
             volume.Value=.5;Slider.IncreaseLarge.Execute(null,volume);
@@ -158,7 +159,7 @@ internal static class Program
             Check(!engine.IsPlaying&&status.Visibility==Visibility.Visible&&!string.IsNullOrWhiteSpace(status.Text),"a failed replacement stops the old sound and displays an inline error");
             CheckHotkeyEditor(window,library,sound);
             CheckMenusAndSpecialHotkeys(window);
-            CheckPreferencePages(window,temp);
+            await CheckPreferencePages(window,temp);
             Check(!window.IsVisible&&!window.IsActive,"playback and error checks leave the test window hidden and inactive");
         }
         finally {
@@ -437,11 +438,40 @@ internal static class Program
             Check(engine.IsPlaying&&Field<PlaybackDestination>(window,"lastDestination")==PlaybackDestination.Speakers,"Play current file again uses the selected play mode immediately");
         }finally{await (Task)Invoke(window,"StopAsync")!;prefs.CaptureDeviceId=capture;prefs.CaptureDeviceIds=captures;prefs.AllowResumeInAnotherMode=resume;mode.SelectedIndex=1;}
     }
-    private static void CheckPreferencePages(MainWindow main,string dataDirectory)
+    private static PreferenceDeviceSnapshot FixtureDevices()=>new([new("fixture-input","Microphone (Test audio)",true),new("fixture-output","Speakers (Test audio)",false)],"fixture-input",new HashSet<string>{"fixture-input"});
+    private static async Task CheckPreferenceResponsiveness(MainWindow main)
     {
-        var type=typeof(MainWindow).Assembly.GetType("SoundboardLab.SettingsWindow")!;
-        var dialog=(Window)Activator.CreateInstance(type,[main,Field<AudioService>(main,"audio"),Field<PreferenceStore>(main,"preferenceStore"),new Func<Task>(()=>Task.CompletedTask),null])!;
+        var store=Field<PreferenceStore>(main,"preferenceStore");var audio=Field<AudioService>(main,"audio");
+        int reads=0,readerThread=0,uiThread=Environment.CurrentManagedThreadId;
+        using var release=new ManualResetEventSlim();var entered=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var watch=System.Diagnostics.Stopwatch.StartNew();
+        var dialog=new SettingsWindow(main,audio,store,()=>Task.CompletedTask,null,token=>{Interlocked.Increment(ref reads);readerThread=Environment.CurrentManagedThreadId;entered.TrySetResult();release.Wait(token);return FixtureDevices();});
+        Console.WriteLine($"Preferences constructor: {watch.Elapsed.TotalMilliseconds:F1} ms; no endpoint enumeration.");
         try{
+            Check(reads==0&&Field<AudioService?>(dialog,"preview") is null,"constructing Preferences neither enumerates audio devices nor creates a preview audio engine");
+            var refresh=dialog.RefreshDevicesAsync(true);await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            Check(readerThread!=uiThread&&!refresh.IsCompleted,"a blocked device scan runs on a worker and leaves the Preferences dispatcher available");
+            Check(ReferenceEquals(refresh,dialog.RefreshDevicesAsync(true))&&reads==1,"concurrent device refresh requests share a single snapshot operation");
+            int ticks=0;var pulse=new DispatcherTimer {Interval=TimeSpan.FromMilliseconds(10)};pulse.Tick+=(_,_)=>ticks++;pulse.Start();
+            try{dialog.SelectPage("Hotkeys");Field<AppPreferences>(dialog,"draft").PlaybackDelayMs=47;await Task.Delay(100);Check(ticks>=2,"UI timer ticks and page changes continue while device enumeration is deliberately held");}
+            finally{pulse.Stop();}
+            release.Set();await refresh;await Dispatcher.Yield(DispatcherPriority.ContextIdle);
+            Check(Field<AppPreferences>(dialog,"draft").PlaybackDelayMs==47&&Field<Button>(dialog,"applyButton").IsEnabled,"late device discovery preserves and marks unsaved edits from other Preferences pages");
+            Check(!dialog.IsVisible&&!dialog.IsActive,"asynchronous Preferences checks never show or activate a window");
+        }finally{release.Set();dialog.Close();}
+        int attempts=0;
+        var retry=new SettingsWindow(main,audio,store,()=>Task.CompletedTask,null,_=>++attempts==1?throw new IOException("device scan fixture"):FixtureDevices());
+        try{await retry.RefreshDevicesAsync(true);Check(Field<PreferenceDeviceSnapshot?>(retry,"deviceSnapshot") is null,"device enumeration failure is handled inside Preferences without a blocking dialog");await retry.RefreshDevicesAsync(true);Check(attempts==2&&Field<PreferenceDeviceSnapshot?>(retry,"deviceSnapshot") is not null,"a failed device refresh can be retried successfully");}finally{retry.Close();}
+        using var closingRelease=new ManualResetEventSlim();var closingEntered=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var closing=new SettingsWindow(main,audio,store,()=>Task.CompletedTask,null,token=>{closingEntered.TrySetResult();closingRelease.Wait(token);return FixtureDevices();});
+        var pending=closing.RefreshDevicesAsync(true);await closingEntered.Task.WaitAsync(TimeSpan.FromSeconds(3));closing.Close();
+        try{await pending.WaitAsync(TimeSpan.FromSeconds(3));Check(Field<PreferenceDeviceSnapshot?>(closing,"deviceSnapshot") is null,"closing Preferences cancels pending device discovery without applying its late results");}finally{closingRelease.Set();}
+    }
+    private static async Task CheckPreferencePages(MainWindow main,string dataDirectory)
+    {
+        var dialog=new SettingsWindow(main,Field<AudioService>(main,"audio"),Field<PreferenceStore>(main,"preferenceStore"),()=>Task.CompletedTask,null,_=>FixtureDevices());
+        try{
+            await dialog.RefreshDevicesAsync(true);
             var body=(FrameworkElement)dialog.Content;
             void Layout(string page){Invoke(dialog,"SelectPage",page);body.Measure(new Size(560,685));body.Arrange(new Rect(0,0,560,685));body.UpdateLayout();}
             T Control<T>(string id) where T:FrameworkElement=>Descendants<T>(body).Single(x=>AutomationProperties.GetAutomationId(x)==id);

@@ -20,7 +20,12 @@ internal sealed partial class SettingsWindow : Window
     private readonly PreferenceStore store;
     private readonly Func<Task> apply;
     private readonly Func<Window,string,string,IEnumerable<HotkeyAssignment>?,bool?,string?> hotkeyEditor;
-    private readonly AudioService preview=new();
+    private AudioService? preview;
+    private readonly Func<CancellationToken,PreferenceDeviceSnapshot> readDevices;
+    private readonly CancellationTokenSource preferencesLifetime=new();
+    private Func<bool,Task> refreshDevices=_=>Task.CompletedTask;
+    private PreferenceDeviceSnapshot? deviceSnapshot;
+    private int devicePageGeneration;
     private AppPreferences draft;
     private readonly DockPanel root=new() { Margin=new(8) };
     private readonly TabControl tabs=new();
@@ -35,8 +40,12 @@ internal sealed partial class SettingsWindow : Window
     private static AppPreferences Clone(AppPreferences value)=>JsonSerializer.Deserialize<AppPreferences>(JsonSerializer.Serialize(value))!;
     public SettingsWindow(MainWindow main,AudioService audio,PreferenceStore store,Func<Task> apply,
         Func<Window,string,string,IEnumerable<HotkeyAssignment>?,bool?,string?>? hotkeyEditor=null)
+        :this(main,audio,store,apply,hotkeyEditor,PreferenceDeviceSnapshot.Read){}
+    internal SettingsWindow(MainWindow main,AudioService audio,PreferenceStore store,Func<Task> apply,
+        Func<Window,string,string,IEnumerable<HotkeyAssignment>?,bool?,string?>? hotkeyEditor,
+        Func<CancellationToken,PreferenceDeviceSnapshot> readDevices)
     {
-        this.main=main;this.audio=audio;this.store=store;this.apply=apply;this.hotkeyEditor=hotkeyEditor??main.EditHotkey;draft=Clone(store.Settings);
+        this.main=main;this.audio=audio;this.store=store;this.apply=apply;this.readDevices=readDevices;this.hotkeyEditor=hotkeyEditor??main.EditHotkey;draft=Clone(store.Settings);
         Style=(Style)Application.Current.FindResource(typeof(Window));
         Title="Preferences";Width=576;Height=736;MinWidth=560;MinHeight=480;WindowStartupLocation=WindowStartupLocation.CenterOwner;
         Background=new SolidColorBrush(Color.FromRgb(240,240,240));Foreground=new SolidColorBrush(Color.FromRgb(0,35,74));
@@ -51,7 +60,7 @@ internal sealed partial class SettingsWindow : Window
         root.AddHandler(ToggleButton.CheckedEvent,new RoutedEventHandler((_,_)=>Dirty()));root.AddHandler(ToggleButton.UncheckedEvent,new RoutedEventHandler((_,_)=>Dirty()));
         root.AddHandler(Selector.SelectionChangedEvent,new SelectionChangedEventHandler((sender,e)=>{if(e.OriginalSource is not TabControl)Dirty();}));
         tabs.SelectionChanged+=(_,e)=>{if(e.OriginalSource==tabs){StopVoiceMeasurement(false);Dispatcher.BeginInvoke(()=>Localization.Apply(this));}};
-        BuildPages();RememberSnapshot();Loaded+=(_,_)=>{Localization.Apply(this);RememberSnapshot();applyButton.IsEnabled=false;};Closed+=(_,_)=>{StopMeasurements();preview.Dispose();};
+        BuildPages();RememberSnapshot();Loaded+=async(_,_)=>{Localization.Apply(this);RememberSnapshot();applyButton.IsEnabled=false;await RefreshDevicesAsync(true);};Closed+=(_,_)=>{preferencesLifetime.Cancel();StopMeasurements();preview?.Dispose();};
         main.ForwardingStateChanged+=ForwardingChanged;Closed+=(_,_)=>main.ForwardingStateChanged-=ForwardingChanged;
     }
     internal void SelectPage(string name)
@@ -102,9 +111,11 @@ internal sealed partial class SettingsWindow : Window
     private void BuildPages()
     {
         StopMeasurements();
+        devicePageGeneration++;deviceSnapshot=null;
         building=true;int selected=Math.Max(0,tabs.SelectedIndex);tabs.Items.Clear();hotkeyRows.Clear();
         var audioPage=Page("Audio");BuildAudio(audioPage);BuildForwarding(audioPage);BuildHotkeys(Page("Hotkeys"));BuildInterface(Page("Interface"));BuildDevices(Page("Devices"));BuildRecorder(Page("Recorder"));BuildEditor(Page("Editor"));BuildNotifications(Page("Notifications"));
         tabs.SelectedIndex=Math.Min(selected,6);Localization.Apply(this);building=false;
+        if(IsLoaded)_=RefreshDevicesAsync(true);
     }
     private void BuildHotkeys(Panel page)
     {
@@ -162,13 +173,15 @@ internal sealed partial class SettingsWindow : Window
         var browse=Button("Browse",(_,_)=>{var dialog=new OpenFileDialog {Filter="Audio files|*.wav;*.mp3;*.m4a;*.ogg;*.flac|All files|*.*"};if(dialog.ShowDialog(this)==true)path.Text=dialog.FileName;});Grid.SetColumn(browse,2);row.Children.Add(browse);
         var listen=Button("♫",async(_,_)=>{try{await PreviewSoundAsync(path.Text);}catch(Exception ex){Dialogs.Error(this,ex);}});listen.MinWidth=22;listen.Padding=new(1);Grid.SetColumn(listen,3);row.Children.Add(listen);
     }
-    private async Task PreviewSoundAsync(string path){await preview.StopAsync();preview.SelectDevices(null,string.IsNullOrWhiteSpace(draft.RenderDeviceId)?null:draft.RenderDeviceId);preview.SpeakerVolume=(float)draft.SpeakerVolume;await preview.PlayAsync(path,PlaybackDestination.Speakers);}
+    private async Task PreviewSoundAsync(string path){preview??=new();await preview.StopAsync();preview.SelectDevices(null,string.IsNullOrWhiteSpace(draft.RenderDeviceId)?null:draft.RenderDeviceId);preview.SpeakerVolume=(float)draft.SpeakerVolume;await preview.PlayAsync(path,PlaybackDestination.Speakers);}
     private async Task Save(bool close)
     {
         StopVoiceMeasurement(true);
         if(saving)return;saving=true;tabs.IsEnabled=false;applyButton.IsEnabled=false;
         try
         {
+            if(deviceSnapshot is null)await RefreshDevicesAsync(true);
+            if(preferencesLifetime.IsCancellationRequested)return;
             if(Validation.GetHasError(root)||InvalidInput(root))throw new ArgumentException("Correct invalid numbers before applying preferences.");
             if(draft.MicrophoneGain is <0 or >4||draft.ClipVolume is <0 or >2||draft.TargetLufs is <-70 or >0||draft.AutoKeyDelayMs is <0 or >10000||draft.PushToTalkTailMs is <0 or >10000||draft.PlaybackDelayMs is <0 or >10000||draft.RecordingLimitSeconds is <0 or >86400||draft.FixedAdjustmentDb is <-30 or >30||draft.KaraokeDelayMs is <-10000 or >10000)throw new ArgumentException("A gain, delay, or recording limit is outside the supported range.");
             draft.CursorUpdatesPerSecond=Math.Clamp(draft.CursorUpdatesPerSecond,15,144);
@@ -181,7 +194,7 @@ internal sealed partial class SettingsWindow : Window
             if(draft.UseExternalEditor&&!File.Exists(draft.ExternalEditorPath))throw new FileNotFoundException("Choose an existing external sound editor.");
             PreferenceStore.Validate(draft);_=ColorConverter.ConvertFromString(draft.ToolbarColor);
             var previous=Clone(store.Settings);
-            string[] previousIds=previous.CaptureDeviceIds.Count>0?previous.CaptureDeviceIds.ToArray():[string.IsNullOrWhiteSpace(previous.CaptureDeviceId)?audio.Devices.FirstOrDefault(x=>x.IsInput&&draft.CaptureDeviceIds.Contains(x.Id))?.Id??"":previous.CaptureDeviceId];
+            string[] previousIds=previous.CaptureDeviceIds.Count>0?previous.CaptureDeviceIds.ToArray():[string.IsNullOrWhiteSpace(previous.CaptureDeviceId)?deviceSnapshot?.DefaultCaptureId??"":previous.CaptureDeviceId];
             if(!previousIds.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(draft.CaptureDeviceIds))await main.ConfigureCaptureDevicesAsync(draft.CaptureDeviceIds);
             var restoreHotkeys=main.PrepareSpecialHotkeyAssignments(draft);
             Copy(draft,store.Settings);

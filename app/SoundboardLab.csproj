@@ -13,6 +13,7 @@
     <ApplicationIcon>assets\app-icon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Controls.Tests" />
     <Resource Include="assets\app-icon.ico" />
     <Resource Include="assets\headphones-empty.ico" />
     <Resource Include="assets\headphones-low.ico" />

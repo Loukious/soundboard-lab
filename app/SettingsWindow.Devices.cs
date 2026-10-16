@@ -7,7 +7,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
-using NAudio.CoreAudioApi;
+using System.Text.Json;
 using SoundboardLab.Audio;
 using SoundboardLab.Models;
 
@@ -15,14 +15,14 @@ namespace SoundboardLab;
 
 internal sealed partial class SettingsWindow
 {
+    internal Task RefreshDevicesAsync(bool initial=false)=>refreshDevices(initial);
     private void BuildDevices(Panel page)
     {
         // Devices fills the page; only the device list scrolls when the window is shorter.
         var viewport=(ScrollViewer)page.Parent;var layout=new Grid {Margin=page.Margin,MaxWidth=505,HorizontalAlignment=HorizontalAlignment.Left};layout.RowDefinitions.Add(new(){Height=GridLength.Auto});layout.RowDefinitions.Add(new(){Height=new(1,GridUnitType.Star)});viewport.Content=layout;viewport.VerticalScrollBarVisibility=ScrollBarVisibility.Disabled;
-        var devices=audio.Devices;
         var group=Group(layout,"Playback device");var playback=Row(group,"Playback device:",92);
-        var render=new ComboBox {ItemsSource=new[]{new AudioDevice("","Default",false)}.Concat(devices.Where(x=>!x.IsInput)),DisplayMemberPath="Name",SelectedValuePath="Id",Width=300,HorizontalAlignment=HorizontalAlignment.Left};
-        AutomationProperties.SetAutomationId(render,nameof(AppPreferences.RenderDeviceId));render.SetBinding(Selector.SelectedValueProperty,Bind(nameof(AppPreferences.RenderDeviceId)));Grid.SetColumn(render,1);playback.Children.Add(render);
+        var render=new ComboBox {IsEnabled=false,DisplayMemberPath="Name",SelectedValuePath="Id",Width=300,HorizontalAlignment=HorizontalAlignment.Left};
+        AutomationProperties.SetAutomationId(render,nameof(AppPreferences.RenderDeviceId));Grid.SetColumn(render,1);playback.Children.Add(render);
         group=Group(layout,"Recording devices");var recordingGroup=(GroupBox)group.Parent;Grid.SetRow(recordingGroup,1);recordingGroup.Margin=new(0);recordingGroup.VerticalContentAlignment=VerticalAlignment.Stretch;
         Explain(group,"Sounds will be played on the recording devices, which you select here.");Check(group,"Check device configuration on startup",nameof(AppPreferences.CheckDevicesOnStartup));
         group.Children.Add(new TextBlock {Text="Check at least one device:",Margin=new(2,4,0,6)});
@@ -46,35 +46,55 @@ internal sealed partial class SettingsWindow
         summary.Children.Add(HelpButton("RecordingDeviceStatusHelp","Device configuration","Select the same recording device in your voice application. If its status is Bad, use Repair, then reopen recording applications. Use Restart Win-Audio only if the audio engine needs to reload its configuration."));
         void UpdateSummary(){bool good=rows.Any(x=>x.Use)&&rows.Where(x=>x.Use).All(x=>x.Installed);status.Text=good?"Good":"Repair required";status.Foreground=good?Brushes.Green:Brushes.Red;}
         void UpdateSelection(){draft.CaptureDeviceIds=rows.Where(x=>x.Use).Select(x=>x.Id).ToList();draft.CaptureDeviceId=draft.CaptureDeviceIds.FirstOrDefault()??"";UpdateSummary();Dirty();}
-        void Refresh(bool initial=false){
-            var selection=rows.Count>0?rows.Where(x=>x.Use).Select(x=>x.Id).ToHashSet(StringComparer.OrdinalIgnoreCase):draft.CaptureDeviceIds.Append(draft.CaptureDeviceId).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            string defaultId="";try{using var enumerator=new MMDeviceEnumerator();using var endpoint=enumerator.GetDefaultAudioEndpoint(DataFlow.Capture,Role.Multimedia);defaultId=endpoint.ID;}catch(System.Runtime.InteropServices.COMException){}
-            rows.Clear();foreach(var device in audio.Devices.Where(x=>x.IsInput)){
-                var row=new DeviceRow {Id=device.Id,Name=device.Name,Use=selection.Contains(device.Id),Boost=draft.DeviceBoosts.GetValueOrDefault(device.Id),IsDefault=device.Id.Equals(defaultId,StringComparison.OrdinalIgnoreCase),Installed=CaptureDeviceConfiguration.IsInstalled(device.Id)};
-                rows.Add(row);row.PropertyChanged+=(_,e)=>{if(e.PropertyName==nameof(DeviceRow.Use))UpdateSelection();};
-            }
-            // Preserve an explicit empty selection while refreshing; choose the default only on first use.
-            if(initial&&selection.All(string.IsNullOrEmpty)&&rows.Count>0){var row=rows.FirstOrDefault(x=>x.IsDefault)??rows[0];row.Use=true;}
-            UpdateSelection();
-            render.ItemsSource=new[]{new AudioDevice("","Default",false)}.Concat(audio.Devices.Where(x=>!x.IsInput));render.SelectedValue=draft.RenderDeviceId;
+        Button repair=null!,refresh=null!;int generation=devicePageGeneration;Task pendingRefresh=Task.CompletedTask;bool loaded=false;
+        async Task Repair(){try{await main.ConfigureCaptureDevicesAsync(rows.Where(x=>x.Use).Select(x=>x.Id),true);await Refresh();}catch(Exception ex){Dialogs.Error(this,ex);}}
+        repair=Button("",async(_,_)=>await Repair());var repairContent=new StackPanel {Orientation=Orientation.Horizontal};repairContent.Children.Add(ShieldIcon());repairContent.Children.Add(new TextBlock {Text="Repair",VerticalAlignment=VerticalAlignment.Center});repair.Content=repairContent;AutomationProperties.SetAutomationId(repair,"RepairRecordingDevices");Grid.SetColumn(repair,1);footer.Children.Add(repair);
+        refresh=AudioIconButton(new System.Windows.Shapes.Path {Data=Geometry.Parse("M14,3 A7,7 0 1 0 15,11 L12,10 A4,4 0 1 1 11,5 L8,8 H16 V0 Z"),Fill=new SolidColorBrush(Color.FromRgb(0,103,171)),Width=17,Height=17,Stretch=Stretch.Uniform},"Refresh","RefreshRecordingDevices",async(_,_)=>await Refresh());Grid.SetColumn(refresh,2);footer.Children.Add(refresh);
+        Task Refresh(bool initial=false){if(!pendingRefresh.IsCompleted)return pendingRefresh;return pendingRefresh=RefreshCore(initial);}
+        async Task RefreshCore(bool initial){
+            table.IsEnabled=render.IsEnabled=repair.IsEnabled=refresh.IsEnabled=false;
+            status.Text=Localization.Text("Loading…");status.Foreground=Brushes.Gray;status.ToolTip=null;
+            var token=preferencesLifetime.Token;
+            try{
+                var snapshot=await Task.Run(()=>readDevices(token),token);
+                if(token.IsCancellationRequested||generation!=devicePageGeneration)return;
+                var selection=loaded?rows.Where(x=>x.Use).Select(x=>x.Id).ToHashSet(StringComparer.OrdinalIgnoreCase):draft.CaptureDeviceIds.Append(draft.CaptureDeviceId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                rows.Clear();foreach(var device in snapshot.Devices.Where(x=>x.IsInput)){
+                    var row=new DeviceRow {Id=device.Id,Name=device.Name,Use=selection.Contains(device.Id),Boost=draft.DeviceBoosts.GetValueOrDefault(device.Id),IsDefault=device.Id.Equals(snapshot.DefaultCaptureId,StringComparison.OrdinalIgnoreCase),Installed=snapshot.InstalledCaptures.Contains(device.Id)};
+                    rows.Add(row);row.PropertyChanged+=(_,e)=>{if(e.PropertyName==nameof(DeviceRow.Use))UpdateSelection();};
+                }
+                if(initial&&!loaded&&selection.All(string.IsNullOrEmpty)&&rows.Count>0)(rows.FirstOrDefault(x=>x.IsDefault)??rows[0]).Use=true;
+                UpdateSelection();
+                // Replacing ItemsSource must not write an intermediate null
+                // selection into the stored playback-device preference.
+                BindingOperations.ClearBinding(render,Selector.SelectedValueProperty);
+                var playbackDevices=new[]{new AudioDevice("","Default",false)}.Concat(snapshot.Devices.Where(x=>!x.IsInput)).ToList();
+                if(!playbackDevices.Any(x=>x.Id==draft.RenderDeviceId))playbackDevices.Add(new(draft.RenderDeviceId,"Unavailable playback device",false));
+                render.ItemsSource=playbackDevices;render.SetBinding(Selector.SelectedValueProperty,Bind(nameof(AppPreferences.RenderDeviceId)));
+                deviceSnapshot=snapshot;loaded=true;
+                // Default discovery must not mark an otherwise unchanged
+                // dialog dirty or discard edits made on other pages.
+                if(initial&&this.snapshot.Length>0){var baseline=JsonSerializer.Deserialize<AppPreferences>(this.snapshot)!;if(baseline.CaptureDeviceIds.Count==0&&string.IsNullOrEmpty(baseline.CaptureDeviceId)){baseline.CaptureDeviceIds=[..draft.CaptureDeviceIds];baseline.CaptureDeviceId=draft.CaptureDeviceId;this.snapshot=JsonSerializer.Serialize(baseline);}}
+                Dirty();Localization.Apply(layout);
+            }catch(OperationCanceledException) when(token.IsCancellationRequested){}
+            catch(Exception ex){if(token.IsCancellationRequested||generation!=devicePageGeneration)return;status.Text=Localization.Text("Could not load devices");status.Foreground=Brushes.Red;status.ToolTip=ex.Message;}
+            finally{if(!token.IsCancellationRequested&&generation==devicePageGeneration){table.IsEnabled=render.IsEnabled=repair.IsEnabled=loaded;refresh.IsEnabled=true;}}
         }
-        async Task Repair(){try{await main.ConfigureCaptureDevicesAsync(rows.Where(x=>x.Use).Select(x=>x.Id),true);Refresh();}catch(Exception ex){Dialogs.Error(this,ex);}}
-        var repair=Button("",async(_,_)=>await Repair());var repairContent=new StackPanel {Orientation=Orientation.Horizontal};repairContent.Children.Add(ShieldIcon());repairContent.Children.Add(new TextBlock {Text="Repair",VerticalAlignment=VerticalAlignment.Center});repair.Content=repairContent;AutomationProperties.SetAutomationId(repair,"RepairRecordingDevices");Grid.SetColumn(repair,1);footer.Children.Add(repair);
-        var refresh=AudioIconButton(new System.Windows.Shapes.Path {Data=Geometry.Parse("M14,3 A7,7 0 1 0 15,11 L12,10 A4,4 0 1 1 11,5 L8,8 H16 V0 Z"),Fill=new SolidColorBrush(Color.FromRgb(0,103,171)),Width=17,Height=17,Stretch=Stretch.Uniform},"Refresh","RefreshRecordingDevices",(_,_)=>Refresh());Grid.SetColumn(refresh,2);footer.Children.Add(refresh);
+        refreshDevices=Refresh;table.IsEnabled=repair.IsEnabled=false;status.Text=Localization.Text("Loading…");status.Foreground=Brushes.Gray;
         var menu=new ContextMenu {Background=new SolidColorBrush(Color.FromRgb(240,240,240)),Foreground=Brushes.Black};menu.Resources["Text"]=new SolidColorBrush(Color.FromRgb(0,35,74));menu.Resources["Palette_414141"]=new SolidColorBrush(Color.FromRgb(204,232,255));
         MenuItem Command(string title,RoutedEventHandler handler){var item=new MenuItem {Header=title,Uid=title,Style=(Style)FindResource("DeviceMenuItem")};item.Click+=handler;menu.Items.Add(item);return item;}
         var boost=Command("Set boost",(_,_)=>{if(table.SelectedItem is DeviceRow row)SetDeviceBoost(row);});
         var setup=Command("Set setup mode",(_,_)=>{if(table.SelectedItem is DeviceRow row){var dialog=CreateSetupModeWindow(row,RefreshAfterSetup);dialog.Owner=this;dialog.ShowDialog();}});
         var separator=new Separator();menu.Items.Add(separator);Command("Windows Audio Preferences",(_,_)=>{try{Process.Start(new ProcessStartInfo("control.exe","mmsys.cpl,,1"){UseShellExecute=true});}catch(Exception ex){Dialogs.Error(this,ex);}});
-        var restart=Command("Restart Win-Audio",async(_,_)=>{if(MessageBox.Show(this,"This briefly interrupts playback and recording in all applications. Restart Windows Audio now?","Restart Windows Audio Service?",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes)return;try{await main.RestartWindowsAudioAsync();Refresh();}catch(Exception ex){Dialogs.Error(this,ex);}});restart.Icon=ShieldIcon();
+        var restart=Command("Restart Win-Audio",async(_,_)=>{if(MessageBox.Show(this,"This briefly interrupts playback and recording in all applications. Restart Windows Audio now?","Restart Windows Audio Service?",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes)return;try{await main.RestartWindowsAudioAsync();await Refresh();}catch(Exception ex){Dialogs.Error(this,ex);}});restart.Icon=ShieldIcon();
         menu.Opened+=(_,_)=>{bool selected=table.SelectedItem is DeviceRow;boost.Visibility=setup.Visibility=separator.Visibility=selected?Visibility.Visible:Visibility.Collapsed;boost.IsEnabled=setup.IsEnabled=selected;Localization.Apply(menu);};
         table.PreviewMouseRightButtonDown+=(_,e)=>{var item=FindDeviceItem(e.OriginalSource as DependencyObject);table.SelectedItem=item?.Content;boost.IsEnabled=setup.IsEnabled=item is not null;};
         table.PreviewMouseLeftButtonDown+=(_,e)=>{if(e.ClickCount<2||e.ClickCount%2!=0||FindDeviceItem(e.OriginalSource as DependencyObject) is not {} item)return;if(e.OriginalSource is DependencyObject origin&&FindDeviceCheck(origin))return;e.Handled=true;table.SelectedItem=item.Content;if(item.Content is DeviceRow row)SetDeviceBoost(row);};
-        table.ContextMenu=menu;Refresh(true);
+        table.ContextMenu=menu;
         var recordingLayout=new DockPanel();var recordingChildren=group.Children.Cast<UIElement>().ToArray();group.Children.Clear();
         foreach(var child in recordingChildren.Where(x=>x!=table)){DockPanel.SetDock(child,child==footer?Dock.Bottom:Dock.Top);recordingLayout.Children.Add(child);}
         table.ClearValue(HeightProperty);recordingLayout.Children.Add(table);recordingGroup.Content=recordingLayout;
-        void RefreshAfterSetup()=>Refresh();
+        void RefreshAfterSetup()=>_=Refresh();
     }
     private static ListViewItem? FindDeviceItem(DependencyObject? item){while(item is not null){if(item is ListViewItem row)return row;if(item is GridViewColumnHeader)return null;item=item is Visual?VisualTreeHelper.GetParent(item):LogicalTreeHelper.GetParent(item);}return null;}
     private static bool FindDeviceCheck(DependencyObject? item){while(item is not null&&item is not ListViewItem){if(item is CheckBox)return true;item=item is Visual?VisualTreeHelper.GetParent(item):LogicalTreeHelper.GetParent(item);}return false;}

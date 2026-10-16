@@ -6,6 +6,7 @@ use `v` followed by the app version; prereleases use a suffix such as `-rc.1`.
 
 ## [Unreleased]
 
+- Keep Preferences responsive during playback by discovering devices once in the background and creating preview audio only on demand.
 - Change the headphones artwork at the original volume bands: muted at 0%, low at 1–33%, medium at 34–66%, and high at 67–100%.
 - Keep held volume clicks accurate before the thumb layout updates, avoiding a jump to zero.
 - Use the original headphones artwork and native mute-cross placement at each display DPI.
