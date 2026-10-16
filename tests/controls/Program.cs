@@ -218,13 +218,20 @@ internal static class Program
         MoveVolume(-500,-200);bool atStart=speaker.Value==0;MoveVolume(track.ActualWidth+500,300);
         Check(atStart&&speaker.Value==1,"captured volume drags clamp at either end outside the track");
         speaker.Value=0;await Layout();var volumeIcon=Field<HeadphonesVolumeIcon>(window,"SpeakerVolumeIcon");
-        int RedPixels(){var drawing=new DrawingVisual();using(var paint=drawing.RenderOpen())paint.DrawRectangle(new VisualBrush(volumeIcon){Stretch=Stretch.Fill},null,new Rect(0,0,16,16));var bitmap=new System.Windows.Media.Imaging.RenderTargetBitmap(16,16,96,96,PixelFormats.Pbgra32);bitmap.Render(drawing);var pixels=new byte[16*16*4];bitmap.CopyPixels(pixels,16*4,0);return Enumerable.Range(0,256).Count(i=>pixels[i*4+2]>pixels[i*4]+40&&pixels[i*4+2]>pixels[i*4+1]+40);}
+        byte[] VolumeIconPixels(){var drawing=new DrawingVisual();using(var paint=drawing.RenderOpen())paint.DrawRectangle(new VisualBrush(volumeIcon){Stretch=Stretch.Fill},null,new Rect(0,0,16,16));var bitmap=new System.Windows.Media.Imaging.RenderTargetBitmap(16,16,96,96,PixelFormats.Pbgra32);bitmap.Render(drawing);var pixels=new byte[16*16*4];bitmap.CopyPixels(pixels,16*4,0);return pixels;}
+        int RedPixels(){var pixels=VolumeIconPixels();return Enumerable.Range(0,256).Count(i=>pixels[i*4+2]>pixels[i*4]+40&&pixels[i*4+2]>pixels[i*4+1]+40);}
         Check(volumeIcon.IsMuted&&RedPixels()>5,"zero speaker volume renders the reference's red mute cross over its copied headphones artwork");
         speaker.Value=.5;await Layout();Check(!volumeIcon.IsMuted&&RedPixels()==0,"restoring speaker volume removes the headphones mute cross");
+        var iconSamples=new Dictionary<int,byte[]>();
+        foreach(int percent in new[]{0,1,20,33,34,50,66,67,80,100}){speaker.Value=percent/100d;await Layout();iconSamples[percent]=VolumeIconPixels();}
+        Check(iconSamples[1].SequenceEqual(iconSamples[20])&&iconSamples[1].SequenceEqual(iconSamples[33]),"the copied low-volume icon remains unchanged from 1 through 33 percent");
+        Check(iconSamples[34].SequenceEqual(iconSamples[50])&&iconSamples[34].SequenceEqual(iconSamples[66]),"the copied medium-volume icon covers 34 through 66 percent");
+        Check(iconSamples[67].SequenceEqual(iconSamples[80])&&iconSamples[67].SequenceEqual(iconSamples[100]),"the copied high-volume icon covers 67 through 100 percent");
+        Check(!iconSamples[0].SequenceEqual(iconSamples[1])&&!iconSamples[33].SequenceEqual(iconSamples[34])&&!iconSamples[66].SequenceEqual(iconSamples[67]),"rendered headphones artwork changes at the original 0/1, 33/34 and 66/67 percent boundaries");
         speaker.Value=.4;settings.LinearVolumeSlider=false;speaker.Value=.5;Check(((ToolTip)speaker.ToolTip).Content as string=="25%","nonlinear slider feedback displays the applied gain");settings.LinearVolumeSlider=true;speaker.Value=0;clip.Value=1;
         foreach(float level in new[]{.2f,.4f,.7f}){
             Invoke(window,"ApplyApplicationVolume",level);
-            Check(Math.Abs(speaker.Value-level)<.0001&&Math.Abs(settings.SpeakerVolume-level)<.0001&&Field<AudioService>(window,"audio").SpeakerVolume==level,"incoming Mixer level updates the slider, saved gain, and audio state at "+level);
+            Check(Math.Abs(speaker.Value-level)<.0001&&Math.Abs(volumeIcon.Volume-level)<.0001&&Math.Abs(settings.SpeakerVolume-level)<.0001&&Field<AudioService>(window,"audio").SpeakerVolume==level,"incoming Mixer level updates the slider, icon, saved gain, and audio state at "+level);
         }
         settings.LinearVolumeSlider=false;Invoke(window,"ApplyApplicationVolume",.25f);Check(Math.Abs(speaker.Value-.5)<.0001,"incoming Mixer gain respects the nonlinear volume setting");settings.LinearVolumeSlider=true;speaker.Value=0;
         bool initialized=Field<bool>(window,"initialized");typeof(MainWindow).GetField("initialized",Private)!.SetValue(window,false);

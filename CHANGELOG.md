@@ -6,6 +6,7 @@ use `v` followed by the app version; prereleases use a suffix such as `-rc.1`.
 
 ## [Unreleased]
 
+- Change the headphones artwork at the original volume bands: muted at 0%, low at 1–33%, medium at 34–66%, and high at 67–100%.
 - Keep held volume clicks accurate before the thumb layout updates, avoiding a jump to zero.
 - Use the original headphones artwork and native mute-cross placement at each display DPI.
 - Match the compact right-aligned search strip and its bordered buttons.

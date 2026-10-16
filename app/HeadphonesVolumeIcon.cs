@@ -7,13 +7,22 @@ namespace SoundboardLab;
 public sealed class HeadphonesVolumeIcon : FrameworkElement
 {
     public static readonly DependencyProperty FillProperty=DependencyProperty.Register(nameof(Fill),typeof(Brush),typeof(HeadphonesVolumeIcon),new FrameworkPropertyMetadata(Brushes.DodgerBlue,FrameworkPropertyMetadataOptions.AffectsRender));
-    public static readonly DependencyProperty IsMutedProperty=DependencyProperty.Register(nameof(IsMuted),typeof(bool),typeof(HeadphonesVolumeIcon),new FrameworkPropertyMetadata(false,FrameworkPropertyMetadataOptions.AffectsRender));
+    public static readonly DependencyProperty VolumeProperty=DependencyProperty.Register(nameof(Volume),typeof(double),typeof(HeadphonesVolumeIcon),new FrameworkPropertyMetadata(0d,FrameworkPropertyMetadataOptions.AffectsRender),value=>double.IsFinite((double)value));
     public Brush Fill {get=>(Brush)GetValue(FillProperty);set=>SetValue(FillProperty,value);}
-    public bool IsMuted {get=>(bool)GetValue(IsMutedProperty);set=>SetValue(IsMutedProperty,value);}
-    private static readonly BitmapFrame[] frames=LoadFrames();
-    private static BitmapFrame[] LoadFrames()
+    public double Volume {get=>(double)GetValue(VolumeProperty);set=>SetValue(VolumeProperty,value);}
+    public bool IsMuted=>VolumeBand==0;
+    private int VolumeBand {
+        get {
+            // The reference selects from the slider's integer percentage:
+            // muted at 0, low through 33, medium through 66, then high.
+            int percent=(int)Math.Round(Math.Clamp(Volume,0,1)*100,MidpointRounding.AwayFromZero);
+            return percent==0?0:percent<=33?1:percent<=66?2:3;
+        }
+    }
+    private static readonly BitmapFrame[][] frames=[LoadFrames("empty"),LoadFrames("low"),LoadFrames("mid"),LoadFrames("high")];
+    private static BitmapFrame[] LoadFrames(string level)
     {
-        using var stream=Application.GetResourceStream(new Uri("pack://application:,,,/SoundboardLab;component/assets/headphones-empty.ico")).Stream;
+        using var stream=Application.GetResourceStream(new Uri($"pack://application:,,,/SoundboardLab;component/assets/headphones-{level}.ico")).Stream;
         var decoded=BitmapDecoder.Create(stream,BitmapCreateOptions.PreservePixelFormat,BitmapCacheOption.OnLoad).Frames.ToArray();
         foreach(var frame in decoded)frame.Freeze();return decoded;
     }
@@ -21,7 +30,7 @@ public sealed class HeadphonesVolumeIcon : FrameworkElement
     protected override void OnRender(DrawingContext drawing)
     {
         base.OnRender(drawing);if(ActualWidth<=0||ActualHeight<=0)return;
-        var frame=frames.MinBy(x=>Math.Abs(x.PixelWidth-16*VisualTreeHelper.GetDpi(this).PixelsPerDip))!;
+        var frame=frames[VolumeBand].MinBy(x=>Math.Abs(x.PixelWidth-16*VisualTreeHelper.GetDpi(this).PixelsPerDip))!;
         int size=frame.PixelWidth;
         drawing.PushTransform(new ScaleTransform(ActualWidth/size,ActualHeight/size));
         // Use the original resource's alpha, retaining its exact headband and

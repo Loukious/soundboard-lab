@@ -58,6 +58,10 @@ internal static class Program
             await Save(main,Path.Combine(output,"search-panel.png"),1020,660);
             Field<Slider>(main,"SpeakerSlider").Value=0;
             await Save(main,Path.Combine(output,"muted-speakers.png"),1020,660);
+            foreach(var (level,name) in new[]{(.2,"low"),(.5,"mid"),(.8,"high")}){
+                Field<Slider>(main,"SpeakerSlider").Value=level;
+                await Save(main,Path.Combine(output,"volume-"+name+".png"),1020,660);
+            }
             Field<Slider>(main,"SpeakerSlider").Value=.75;Field<FrameworkElement>(main,"SearchPanel").Visibility=Visibility.Collapsed;
             var prefs=Field<PreferenceStore>(main,"preferenceStore");prefs.Settings.ShowHotbar=true;Field<FrameworkElement>(main,"HotbarPanel").Visibility=Visibility.Visible;Invoke(main,"RefreshHotbar");
             await Save(main,Path.Combine(output,"hotbar.png"),1020,660);
