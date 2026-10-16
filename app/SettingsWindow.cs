@@ -26,6 +26,7 @@ internal sealed partial class SettingsWindow : Window
     private Func<bool,Task> refreshDevices=_=>Task.CompletedTask;
     private PreferenceDeviceSnapshot? deviceSnapshot;
     private int devicePageGeneration;
+    internal TimeSpan DeviceDiscoveryTimeout {get;set;}=TimeSpan.FromSeconds(15);
     private AppPreferences draft;
     private readonly DockPanel root=new() { Margin=new(8) };
     private readonly TabControl tabs=new();
@@ -182,6 +183,7 @@ internal sealed partial class SettingsWindow : Window
         {
             if(deviceSnapshot is null)await RefreshDevicesAsync(true);
             if(preferencesLifetime.IsCancellationRequested)return;
+            if(deviceSnapshot is null)throw new InvalidOperationException("Recording devices could not be loaded. Refresh the Devices tab before applying preferences.");
             if(Validation.GetHasError(root)||InvalidInput(root))throw new ArgumentException("Correct invalid numbers before applying preferences.");
             if(draft.MicrophoneGain is <0 or >4||draft.ClipVolume is <0 or >2||draft.TargetLufs is <-70 or >0||draft.AutoKeyDelayMs is <0 or >10000||draft.PushToTalkTailMs is <0 or >10000||draft.PlaybackDelayMs is <0 or >10000||draft.RecordingLimitSeconds is <0 or >86400||draft.FixedAdjustmentDb is <-30 or >30||draft.KaraokeDelayMs is <-10000 or >10000)throw new ArgumentException("A gain, delay, or recording limit is outside the supported range.");
             draft.CursorUpdatesPerSecond=Math.Clamp(draft.CursorUpdatesPerSecond,15,144);

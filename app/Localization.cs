@@ -33,6 +33,13 @@ internal static class Localization
     {
         if(catalog.TryGetValue(value,out var translated)||catalog.TryGetValue(Normalize(value),out translated))return translated.Replace('&','_');return value;
     }
+    // Dynamic labels need a new translation source when their state changes.
+    // Otherwise a later Apply restores the label's first (often Loading) value.
+    internal static void SetText(TextBlock block,string value)
+    {
+        originals.GetOrCreateValue(block)[TextBlock.TextProperty]=value;
+        block.Text=Text(value);
+    }
     public static void Apply(DependencyObject root)
     {
         var seen=new HashSet<DependencyObject>();Visit(root);

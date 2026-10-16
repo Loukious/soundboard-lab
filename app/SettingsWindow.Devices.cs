@@ -44,7 +44,7 @@ internal sealed partial class SettingsWindow
         summary.Children.Add(new TextBlock {Text="Status: ",VerticalAlignment=VerticalAlignment.Center});
         var status=new TextBlock {FontWeight=FontWeights.Bold,VerticalAlignment=VerticalAlignment.Center};AutomationProperties.SetAutomationId(status,"RecordingDeviceStatus");summary.Children.Add(status);
         summary.Children.Add(HelpButton("RecordingDeviceStatusHelp","Device configuration","Select the same recording device in your voice application. If its status is Bad, use Repair, then reopen recording applications. Use Restart Win-Audio only if the audio engine needs to reload its configuration."));
-        void UpdateSummary(){bool good=rows.Any(x=>x.Use)&&rows.Where(x=>x.Use).All(x=>x.Installed);status.Text=good?"Good":"Repair required";status.Foreground=good?Brushes.Green:Brushes.Red;}
+        void UpdateSummary(){bool good=rows.Any(x=>x.Use)&&rows.Where(x=>x.Use).All(x=>x.Installed);Localization.SetText(status,good?"Good":"Repair required");status.Foreground=good?Brushes.Green:Brushes.Red;}
         void UpdateSelection(){draft.CaptureDeviceIds=rows.Where(x=>x.Use).Select(x=>x.Id).ToList();draft.CaptureDeviceId=draft.CaptureDeviceIds.FirstOrDefault()??"";UpdateSummary();Dirty();}
         Button repair=null!,refresh=null!;int generation=devicePageGeneration;Task pendingRefresh=Task.CompletedTask;bool loaded=false;
         async Task Repair(){try{await main.ConfigureCaptureDevicesAsync(rows.Where(x=>x.Use).Select(x=>x.Id),true);await Refresh();}catch(Exception ex){Dialogs.Error(this,ex);}}
@@ -53,10 +53,10 @@ internal sealed partial class SettingsWindow
         Task Refresh(bool initial=false){if(!pendingRefresh.IsCompleted)return pendingRefresh;return pendingRefresh=RefreshCore(initial);}
         async Task RefreshCore(bool initial){
             table.IsEnabled=render.IsEnabled=repair.IsEnabled=refresh.IsEnabled=false;
-            status.Text=Localization.Text("Loading…");status.Foreground=Brushes.Gray;status.ToolTip=null;
+            Localization.SetText(status,"Loading…");status.Foreground=Brushes.Gray;status.ToolTip=null;
             var token=preferencesLifetime.Token;
             try{
-                var snapshot=await Task.Run(()=>readDevices(token),token);
+                var snapshot=await Task.Run(()=>readDevices(token),token).WaitAsync(DeviceDiscoveryTimeout,token);
                 if(token.IsCancellationRequested||generation!=devicePageGeneration)return;
                 var selection=loaded?rows.Where(x=>x.Use).Select(x=>x.Id).ToHashSet(StringComparer.OrdinalIgnoreCase):draft.CaptureDeviceIds.Append(draft.CaptureDeviceId).ToHashSet(StringComparer.OrdinalIgnoreCase);
                 rows.Clear();foreach(var device in snapshot.Devices.Where(x=>x.IsInput)){
@@ -77,7 +77,7 @@ internal sealed partial class SettingsWindow
                 if(initial&&this.snapshot.Length>0){var baseline=JsonSerializer.Deserialize<AppPreferences>(this.snapshot)!;if(baseline.CaptureDeviceIds.Count==0&&string.IsNullOrEmpty(baseline.CaptureDeviceId)){baseline.CaptureDeviceIds=[..draft.CaptureDeviceIds];baseline.CaptureDeviceId=draft.CaptureDeviceId;this.snapshot=JsonSerializer.Serialize(baseline);}}
                 Dirty();Localization.Apply(layout);
             }catch(OperationCanceledException) when(token.IsCancellationRequested){}
-            catch(Exception ex){if(token.IsCancellationRequested||generation!=devicePageGeneration)return;status.Text=Localization.Text("Could not load devices");status.Foreground=Brushes.Red;status.ToolTip=ex.Message;}
+            catch(Exception ex){if(token.IsCancellationRequested||generation!=devicePageGeneration)return;Localization.SetText(status,"Could not load devices");status.Foreground=Brushes.Red;status.ToolTip=ex is TimeoutException?"Windows did not respond to device discovery. Try Refresh.":ex.Message;}
             finally{if(!token.IsCancellationRequested&&generation==devicePageGeneration){table.IsEnabled=render.IsEnabled=repair.IsEnabled=loaded;refresh.IsEnabled=true;}}
         }
         refreshDevices=Refresh;table.IsEnabled=repair.IsEnabled=false;status.Text=Localization.Text("Loading…");status.Foreground=Brushes.Gray;

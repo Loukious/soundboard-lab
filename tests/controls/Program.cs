@@ -12,6 +12,7 @@ using SoundboardLab;
 using SoundboardLab.Audio;
 using SoundboardLab.Models;
 using SoundboardLab.Services;
+using Localization=SoundboardLab.Localization;
 
 internal static class Program
 {
@@ -464,11 +465,27 @@ internal static class Program
             finally{pulse.Stop();}
             release.Set();await refresh;await Dispatcher.Yield(DispatcherPriority.ContextIdle);
             Check(Field<AppPreferences>(dialog,"draft").PlaybackDelayMs==47&&Field<Button>(dialog,"applyButton").IsEnabled,"late device discovery preserves and marks unsaved edits from other Preferences pages");
+            dialog.SelectPage("Devices");var body=(FrameworkElement)dialog.Content;body.Measure(new Size(560,685));body.Arrange(new Rect(0,0,560,685));body.UpdateLayout();
+            var deviceStatus=Descendants<TextBlock>(body).Single(x=>AutomationProperties.GetAutomationId(x)=="RecordingDeviceStatus");
+            Localization.Apply(dialog);Check(deviceStatus.Text=="Repair required"||deviceStatus.Text=="Good","a translation pass after discovery keeps the completed device status instead of restoring Loading");
+            var deviceTable=Descendants<ListView>(body).Single(x=>AutomationProperties.GetAutomationId(x)=="RecordingDevices");
+            var row=deviceTable.Items[0];var use=row.GetType().GetProperty("Use")!;use.SetValue(row,false);Localization.Apply(dialog);
+            Check(deviceStatus.Text=="Repair required"&&Field<AppPreferences>(dialog,"draft").CaptureDeviceIds.Count==0,"unchecking a recording device updates both its draft selection and status through later translation passes");
+            use.SetValue(row,true);Localization.Apply(dialog);
+            Check(deviceStatus.Text=="Good"&&Field<AppPreferences>(dialog,"draft").CaptureDeviceIds.SequenceEqual(new[]{"fixture-input"}),"checking an installed recording device remains Good after translation and stores the selected endpoint");
             Check(!dialog.IsVisible&&!dialog.IsActive,"asynchronous Preferences checks never show or activate a window");
         }finally{release.Set();dialog.Close();}
         int attempts=0;
         var retry=new SettingsWindow(main,audio,store,()=>Task.CompletedTask,null,_=>++attempts==1?throw new IOException("device scan fixture"):FixtureDevices());
         try{await retry.RefreshDevicesAsync(true);Check(Field<PreferenceDeviceSnapshot?>(retry,"deviceSnapshot") is null,"device enumeration failure is handled inside Preferences without a blocking dialog");await retry.RefreshDevicesAsync(true);Check(attempts==2&&Field<PreferenceDeviceSnapshot?>(retry,"deviceSnapshot") is not null,"a failed device refresh can be retried successfully");}finally{retry.Close();}
+        using var timeoutRelease=new ManualResetEventSlim();int timeoutReads=0;
+        var timeout=new SettingsWindow(main,audio,store,()=>Task.CompletedTask,null,token=>{if(Interlocked.Increment(ref timeoutReads)==1)timeoutRelease.Wait(token);return FixtureDevices();}){DeviceDiscoveryTimeout=TimeSpan.FromMilliseconds(60)};
+        try{
+            await timeout.RefreshDevicesAsync(true).WaitAsync(TimeSpan.FromSeconds(3));timeout.SelectPage("Devices");var body=(FrameworkElement)timeout.Content;body.Measure(new Size(560,685));body.Arrange(new Rect(0,0,560,685));body.UpdateLayout();Localization.Apply(timeout);
+            Check(Descendants<TextBlock>(body).Single(x=>AutomationProperties.GetAutomationId(x)=="RecordingDeviceStatus").Text=="Could not load devices","a stalled Windows device scan times out and retains its error status after translation");
+            await timeout.RefreshDevicesAsync(true);timeoutRelease.Set();await Task.Delay(40);
+            Check(Field<PreferenceDeviceSnapshot?>(timeout,"deviceSnapshot") is not null&&timeoutReads==2,"a timed-out scan permits retry and its late result cannot replace the retry snapshot");
+        }finally{timeoutRelease.Set();timeout.Close();}
         using var closingRelease=new ManualResetEventSlim();var closingEntered=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var closing=new SettingsWindow(main,audio,store,()=>Task.CompletedTask,null,token=>{closingEntered.TrySetResult();closingRelease.Wait(token);return FixtureDevices();});
         var pending=closing.RefreshDevicesAsync(true);await closingEntered.Task.WaitAsync(TimeSpan.FromSeconds(3));closing.Close();
