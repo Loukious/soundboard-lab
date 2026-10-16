@@ -6,6 +6,10 @@ use `v` followed by the app version; prereleases use a suffix such as `-rc.1`.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-16
+
+### Fixed
+
 - Restore Special Hotkeys action icons and the separate action/value/hotkey columns from the reference.
 - Allow confirmed overwrites between special actions within the Preferences draft and match the compact Set/Edit hotkey capture layout.
 - Keep Preferences responsive during playback by discovering devices once in the background and creating preview audio only on demand.
