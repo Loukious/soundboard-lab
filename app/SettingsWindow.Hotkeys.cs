@@ -30,10 +30,9 @@ internal sealed partial class SettingsWindow
         var column=((GridView)table.View).Columns[0];column.DisplayMemberBinding=null;
         var heading=new Style(typeof(GridViewColumnHeader));heading.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty,HorizontalAlignment.Left));table.Resources[typeof(GridViewColumnHeader)]=heading;
         var cell=new DataTemplate();var panel=new FrameworkElementFactory(typeof(StackPanel));panel.SetValue(StackPanel.OrientationProperty,Orientation.Horizontal);
-        var icon=new FrameworkElementFactory(typeof(System.Windows.Shapes.Path));icon.SetValue(FrameworkElement.WidthProperty,15d);icon.SetValue(FrameworkElement.HeightProperty,15d);icon.SetValue(FrameworkElement.MarginProperty,new Thickness(0,0,3,0));icon.SetValue(System.Windows.Shapes.Shape.StretchProperty,Stretch.Uniform);icon.SetValue(System.Windows.Shapes.Shape.FillProperty,new SolidColorBrush(Color.FromRgb(0,103,171)));
-        icon.SetBinding(System.Windows.Shapes.Path.DataProperty,new Binding(nameof(HotkeyRow.Action)){Converter=new SpecialActionIconConverter()});icon.SetBinding(UIElement.VisibilityProperty,new Binding(nameof(HotkeyRow.Action)){Converter=new SpecialActionIconConverter(),ConverterParameter="Visibility"});panel.AppendChild(icon);
+        var icon=new FrameworkElementFactory(typeof(SpecialActionIcon));icon.SetValue(FrameworkElement.WidthProperty,16d);icon.SetValue(FrameworkElement.HeightProperty,16d);icon.SetValue(FrameworkElement.MarginProperty,new Thickness(0,0,3,0));icon.SetBinding(SpecialActionIcon.ActionProperty,new Binding(nameof(HotkeyRow.Action)));panel.AppendChild(icon);
         var text=new FrameworkElementFactory(typeof(TextBlock));text.SetValue(FrameworkElement.VerticalAlignmentProperty,VerticalAlignment.Center);text.SetBinding(TextBlock.TextProperty,new Binding(nameof(HotkeyRow.Title)){Converter=new LocalizedTextConverter()});panel.AppendChild(text);cell.VisualTree=panel;column.CellTemplate=cell;
-        table.SizeChanged+=(_,_)=>((GridView)table.View).Columns[1].Width=Math.Max(100,table.ActualWidth-column.Width-22);
+        table.SizeChanged+=(_,_)=>((GridView)table.View).Columns[2].Width=Math.Max(100,table.ActualWidth-column.Width-40-22);
     }
     private void ModifierRow(Panel parent,string label,string property,bool numcode)
     {
@@ -53,22 +52,3 @@ internal sealed partial class SettingsWindow
     }
 }
 
-internal sealed class SpecialActionIconConverter:IValueConverter
-{
-    public object Convert(object value,Type type,object parameter,CultureInfo culture)
-    {
-        string? shape=(value as string) switch {
-            "forwardingToggle" or "forwardingPush"=>"M0,4 H8 V0 L16,8 8,16 V12 H0 Z",
-            "stop" or "recordEnd"=>"M0,0 H16 V16 H0 Z",
-            "play" or "playSelected" or "playCurrent" or "playPreviouslyPlayed" or "playModeDefault"=>"M1,0 L16,8 1,16 Z",
-            "pauseResume"=>"M1,0 H6 V16 H1 Z M10,0 H15 V16 H10 Z",
-            "playPrevious"=>"M0,0 H3 V16 H0 Z M16,0 L4,8 16,16 Z",
-            "playNext"=>"M13,0 H16 V16 H13 Z M0,0 L12,8 0,16 Z",
-            "recordBegin" or "recordBeginSpeakers" or "recordBeginMicrophone"=>"M8,0 A8,8 0 1 1 7.99,0 Z",
-            "playModeSpeakers" or "playTtsRender"=>"M1,15 V7 C1,-2 15,-2 15,7 V15 H11 V7 H13 C13,0 3,0 3,7 H5 V15 Z",
-            "playModeMicrophone" or "playTtsCapture"=>"M5,1 C5,-1 11,-1 11,1 V8 C11,12 5,12 5,8 Z M2,7 H4 V9 C4,14 12,14 12,9 V7 H14 V9 C14,13 12,15 9,15 V17 H12 V19 H4 V17 H7 V15 C4,15 2,13 2,9 Z",
-            _=>null};
-        return parameter as string=="Visibility"?(shape is null?Visibility.Collapsed:Visibility.Visible):shape is null?Geometry.Empty:Geometry.Parse(shape);
-    }
-    public object ConvertBack(object value,Type type,object parameter,CultureInfo culture)=>Binding.DoNothing;
-}

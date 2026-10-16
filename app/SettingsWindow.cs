@@ -120,13 +120,13 @@ internal sealed partial class SettingsWindow : Window
     private void BuildHotkeys(Panel page)
     {
         var group=Group(page,"Special Hotkeys");
-        foreach(var action in SpecialHotkeyActions.All)hotkeyRows.Add(new(){Action=action.Key,Title=ActionTitle(action),Hotkey=draft.ActionHotkeys.GetValueOrDefault(action.Key,draft.ActionHotkeys.GetValueOrDefault(SpecialHotkeyActions.NormalizeKey(action.Key),""))});
+        foreach(var action in SpecialHotkeyActions.All)hotkeyRows.Add(new(){Action=action.Key,Title=Localization.Text(action.Title),Value=ActionValue(action),Hotkey=draft.ActionHotkeys.GetValueOrDefault(action.Key,draft.ActionHotkeys.GetValueOrDefault(SpecialHotkeyActions.NormalizeKey(action.Key),""))});
         foreach(var pair in draft.ActionHotkeys.Where(x=>!SpecialHotkeyActions.All.Any(a=>a.Key==x.Key||SpecialHotkeyActions.NormalizeKey(a.Key)==x.Key)))hotkeyRows.Add(new(){Action=pair.Key,Title=pair.Key,Hotkey=pair.Value});
-        var table=Table(group,192,("Action",nameof(HotkeyRow.Title),320),("Hotkey",nameof(HotkeyRow.Hotkey),155));ConfigureActionIcons(table);System.Windows.Automation.AutomationProperties.SetAutomationId(table,"SpecialHotkeyActions");table.ItemsSource=hotkeyRows;
+        var table=Table(group,192,("Action",nameof(HotkeyRow.Title),277),("",nameof(HotkeyRow.Value),40),("Hotkey",nameof(HotkeyRow.Hotkey),155));ConfigureActionIcons(table);System.Windows.Automation.AutomationProperties.SetAutomationId(table,"SpecialHotkeyActions");table.ItemsSource=hotkeyRows;
         var buttons=new StackPanel {Orientation=Orientation.Horizontal};group.Children.Add(buttons);
         var assign=Button("Set hotkey",(_,_)=>SetSpecialHotkey(table));assign.IsEnabled=false;buttons.Children.Add(assign);
         table.PreviewMouseLeftButtonDown+=SpecialHotkey_Pressed;
-        var change=Button("Change value",(_,_)=>{if(table.SelectedItem is not HotkeyRow row)return;var action=SpecialHotkeyActions.All.First(x=>x.Key==row.Action);if(Dialogs.Prompt(this,"Change value",action.Title+" ("+action.Unit+")",draft.ActionValues.GetValueOrDefault(action.Key,action.DefaultValue??0).ToString()) is {} text){if(!double.TryParse(text,out var value)||!double.IsFinite(value)||value<(action.Key.StartsWith("volumeSet")?0:1)||value>(action.Unit=="s"?3600:100)){MessageBox.Show(this,"Enter a value within "+(action.Unit=="s"?"1–3600 seconds":action.Key.StartsWith("volumeSet")?"0–100%":"1–100%"));return;}draft.ActionValues[action.Key]=value;row.Title=ActionTitle(action);table.Items.Refresh();Dirty();}});change.IsEnabled=false;buttons.Children.Add(change);table.SelectionChanged+=(_,_)=>{assign.IsEnabled=table.SelectedItem is HotkeyRow;change.IsEnabled=table.SelectedItem is HotkeyRow row&&SpecialHotkeyActions.All.Any(x=>x.Key==row.Action&&x.DefaultValue.HasValue);};
+        var change=Button("Change value",(_,_)=>{if(table.SelectedItem is not HotkeyRow row)return;var action=SpecialHotkeyActions.All.First(x=>x.Key==row.Action);if(Dialogs.Prompt(this,"Change value",action.Title+" ("+action.Unit+")",draft.ActionValues.GetValueOrDefault(action.Key,action.DefaultValue??0).ToString()) is {} text){if(!double.TryParse(text,out var value)||!double.IsFinite(value)||value<(action.Key.StartsWith("volumeSet")?0:1)||value>(action.Unit=="s"?3600:100)){MessageBox.Show(this,"Enter a value within "+(action.Unit=="s"?"1–3600 seconds":action.Key.StartsWith("volumeSet")?"0–100%":"1–100%"));return;}draft.ActionValues[action.Key]=value;row.Value=ActionValue(action);table.Items.Refresh();Dirty();}});change.IsEnabled=false;buttons.Children.Add(change);table.SelectionChanged+=(_,_)=>{assign.IsEnabled=table.SelectedItem is HotkeyRow;change.IsEnabled=table.SelectedItem is HotkeyRow row&&SpecialHotkeyActions.All.Any(x=>x.Key==row.Action&&x.DefaultValue.HasValue);};
         group=Group(page,"Numpad Hotkeys");ModifierRow(group,"Enable Alt+Numcode hotkeys",nameof(AppPreferences.AltNumcodeHotkeys),true);ModifierRow(group,"Enable Ctrl+Alt+Index hotkeys",nameof(AppPreferences.IndexHotkeys),false);
         group=Group(page,"Auto Keys");Explain(group,"Presses keys automatically when you play sounds.");autoKeysList=Table(group,94,("Key","Key",160),("Type","Type",300));RefreshAutoKeys();
         buttons=new(){Orientation=Orientation.Horizontal};group.Children.Add(buttons);
@@ -134,7 +134,7 @@ internal sealed partial class SettingsWindow : Window
 
         group=Group(page,"Advanced options");Check(group,"Pass hotkeys",nameof(AppPreferences.PassHotkeys));Check(group,"Auto stop (recommended)",nameof(AppPreferences.StopOnNewSound));Check(group,"Allow left and right modifiers",nameof(AppPreferences.AllowLeftRightModifiers));Check(group,"Same hotkeys in all categories",nameof(AppPreferences.SameHotkeysInAllCategories));
     }
-    private string ActionTitle(SpecialHotkeyAction action)=>Localization.Text(action.Title)+(action.DefaultValue.HasValue?" "+draft.ActionValues.GetValueOrDefault(action.Key,action.DefaultValue.Value).ToString("0.##")+" "+action.Unit:"");
+    private string ActionValue(SpecialHotkeyAction action)=>action.DefaultValue.HasValue?draft.ActionValues.GetValueOrDefault(action.Key,action.DefaultValue.Value).ToString("0.##")+action.Unit:"";
     private void RefreshAutoKeys(){autoKeysList.ItemsSource=null;autoKeysList.ItemsSource=draft.AutoKeys;}
     private void EditAutoKey(bool edit)
     {
@@ -210,5 +210,6 @@ internal sealed partial class SettingsWindow : Window
         var seen=new HashSet<DependencyObject>();return Visit(root);
         bool Visit(DependencyObject item){if(!seen.Add(item))return false;if(Validation.GetHasError(item))return true;if(LogicalTreeHelper.GetChildren(item).OfType<DependencyObject>().Any(Visit))return true;if(item is Visual)for(int i=0;i<VisualTreeHelper.GetChildrenCount(item);i++)if(Visit(VisualTreeHelper.GetChild(item,i)))return true;return false;}
     }
-    private sealed class HotkeyRow {public string Action {get;set;}="";public string Title {get;set;}="";public string Hotkey {get;set;}="";}
+    private sealed class HotkeyRow {public string Action {get;set;}="";public string Title {get;set;}="";public string Value {get;set;}="";public string Hotkey {get;set;}="";}
 }
+
