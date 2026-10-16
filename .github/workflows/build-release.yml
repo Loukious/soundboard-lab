@@ -48,6 +48,7 @@ jobs:
             tests/**/latest-results.txt
             tests/gui-helper-results.txt
             tests/endpoint-install-plan-latest.txt
+            tests/preferences-*.png
           if-no-files-found: warn
           retention-days: 14
   release:

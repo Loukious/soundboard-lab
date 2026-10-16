@@ -14,17 +14,18 @@ internal sealed partial class SettingsWindow
     private void BuildRecorder(Panel page)
     {
         if(string.IsNullOrWhiteSpace(draft.RecordingFolder))draft.RecordingFolder=Path.Combine(main.StateDirectory,"recordings");
-        var group=Group(page,"Recorder");
+        var group=Group(page,"Recorder");Grid.SetIsSharedSizeScope(group,true);
         var path=PathField(group,"Save recordings in:",nameof(AppPreferences.RecordingFolder),true);
         var pathRow=(FrameworkElement)path.Parent;pathRow.Width=404;pathRow.HorizontalAlignment=HorizontalAlignment.Left;pathRow.Margin=new(0,0,0,8);
-        ComboBox Option(string label,string property,string[] values,string selected){var combo=Choice(group,label,values,selected,property,236);combo.Width=162;return combo;}
+        void AlignValues(Grid row){row.ColumnDefinitions[0].SharedSizeGroup="RecorderLabels";row.ColumnDefinitions[1].SharedSizeGroup="RecorderValues";row.ColumnDefinitions[1].Width=new(166);}
+        ComboBox Option(string label,string property,string[] values,string selected){var combo=Choice(group,label,values,selected,property,236);combo.Width=162;AlignValues((Grid)combo.Parent);return combo;}
         var format=Option("Save as:",nameof(AppPreferences.RecordingFormat),["M4A","MP3","WAV"],draft.RecordingFormat);
         var bitrate=Option("Bitrate:",nameof(AppPreferences.RecordingBitrate),["320 Kbps","256 Kbps","224 Kbps","192 Kbps","160 Kbps","128 Kbps","112 Kbps","96 Kbps"],draft.RecordingBitrate);
         void UpdateBitrate()=>((UIElement)bitrate.Parent).IsEnabled=format.SelectedItem as string=="MP3";
         format.SelectionChanged+=(_,_)=>UpdateBitrate();UpdateBitrate();
         Option("Add to category:",nameof(AppPreferences.RecordingCategory),new[]{"Selected category","My Sounds"}.Concat(main.CategoryNames).Distinct().ToArray(),draft.RecordingCategory);
         Option("Insert position in sound list:",nameof(AppPreferences.RecordingInsertPosition),["Beginning","End"],draft.RecordingInsertPosition);
-        var normalizeRow=Row(group,"",236);normalizeRow.Children.Clear();
+        var normalizeRow=Row(group,"",236);AlignValues(normalizeRow);normalizeRow.Children.Clear();
         var normalize=Check(normalizeRow,"Automatically normalize recordings to:",nameof(AppPreferences.NormalizeRecordings));normalize.Margin=new(0,2,0,2);normalize.VerticalAlignment=VerticalAlignment.Center;
         var target=new ComboBox {IsEditable=true,Width=162,HorizontalAlignment=HorizontalAlignment.Left,ItemsSource=Enumerable.Range(0,17).Select(i=>(59+i*3)+".0 dB")};
         AutomationProperties.SetAutomationId(target,nameof(AppPreferences.RecordingTargetDb));
@@ -38,7 +39,7 @@ internal sealed partial class SettingsWindow
         var limitRow=(Grid)limit.Parent;limitRow.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
         var duration=new TextBlock {Margin=new(8,0,0,0),VerticalAlignment=VerticalAlignment.Center};AutomationProperties.SetAutomationId(duration,"RecordingDuration");Grid.SetColumn(duration,2);limitRow.Children.Add(duration);
         // Fix the value column so every recorder input begins at the same x coordinate.
-        limitRow.ColumnDefinitions[1].Width=new(166);
+        AlignValues(limitRow);
         void UpdateDuration(){if(int.TryParse(limit.Text,out int seconds)&&seconds>=0)duration.Text=seconds==0?"(∞)":$"({seconds/60}:{seconds%60:00})";else duration.Text="";}
         limit.TextChanged+=(_,_)=>UpdateDuration();UpdateDuration();
     }

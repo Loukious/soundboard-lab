@@ -320,7 +320,7 @@ internal static class Program
             string[] ids=["RecordingFormat","RecordingBitrate","RecordingCategory","RecordingInsertPosition","RecordingTargetDb"];
             var inputs=ids.Select(id=>Control<ComboBox>(id)).ToArray();var limit=Control<TextBox>("RecordingLimitSeconds");
             double left=inputs[0].TransformToAncestor(body).Transform(new Point()).X;
-            Check(inputs.All(x=>Math.Abs(x.TransformToAncestor(body).Transform(new Point()).X-left)<1)&&Math.Abs(limit.TransformToAncestor(body).Transform(new Point()).X-left)<1,"all recorder dropdowns and the time limit share one aligned value column");
+            Check(inputs.All(x=>Math.Abs(x.TransformToAncestor(body).Transform(new Point()).X-left)<1)&&Math.Abs(limit.TransformToAncestor(body).Transform(new Point()).X-left)<1,"all recorder dropdowns and the time limit share one aligned value column: "+string.Join(", ",inputs.Select(x=>AutomationProperties.GetAutomationId(x)+"="+x.TransformToAncestor(body).Transform(new Point()).X))+", limit="+limit.TransformToAncestor(body).Transform(new Point()).X);
             var format=inputs[0];var bitrate=inputs[1];format.SelectedItem="M4A";Check(!bitrate.IsEnabled,"M4A disables the Recorder bitrate field");format.SelectedItem="MP3";Check(bitrate.IsEnabled,"MP3 enables the Recorder bitrate field");
             var normalize=Control<CheckBox>("NormalizeRecordings");normalize.IsChecked=false;Check(!inputs[4].IsEnabled,"recording normalization target disables when automatic normalization is unchecked");normalize.IsChecked=true;inputs[4].Text="92.0 dB";
             Check(Field<AppPreferences>(dialog,"draft").RecordingTargetDb==92,"the inline Recorder dB dropdown updates the normalization target");
