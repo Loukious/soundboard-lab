@@ -39,12 +39,12 @@ internal static class Program
         app.Startup-=typeof(App).GetMethod("App_Startup",Private)!.CreateDelegate<StartupEventHandler>(app);
         SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());int exitCode=0;
         Dispatcher.CurrentDispatcher.BeginInvoke(async()=>{
-            try{await Run(args.Contains("--layout-only"));}catch(Exception ex){Console.Error.WriteLine(ex);exitCode=1;}
+            try{await Run(args.Contains("--layout-only"),args.Contains("--preference-devices"));}catch(Exception ex){Console.Error.WriteLine(ex);exitCode=1;}
             finally{Dispatcher.CurrentDispatcher.BeginInvokeShutdown(DispatcherPriority.Send);}
         });
         Dispatcher.Run();return exitCode;
     }
-    private static async Task Run(bool layoutOnly)
+    private static async Task Run(bool layoutOnly,bool preferenceDevices)
     {
         string temp=Path.Combine(Path.GetTempPath(),"SoundboardLab-headless-controls-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(temp);
         string path=Path.Combine(temp,"clip.wav");AudioFiles.WriteWav(path,new float[384000]);
@@ -69,6 +69,7 @@ internal static class Program
             await CheckMissingSoundsAndColors(window,library,sound,temp);
             await CheckSearchAndCategoryLayout(window,library,sound,temp);
             await CheckPreferenceResponsiveness(window);
+            if(preferenceDevices){int callerThread=Environment.CurrentManagedThreadId,workerThread=0;var clock=System.Diagnostics.Stopwatch.StartNew();var discovered=await Task.Run(()=>{workerThread=Environment.CurrentManagedThreadId;return PreferenceDeviceSnapshot.Read(CancellationToken.None);});Check(workerThread!=callerThread&&discovered.Devices.All(x=>!string.IsNullOrWhiteSpace(x.Id)),"the actual read-only Windows device snapshot completes on its own background thread");Console.WriteLine($"Background device discovery: {clock.Elapsed.TotalMilliseconds:F1} ms for {discovered.Devices.Length} endpoints. No audio stream or volume change.");}
             if(layoutOnly){CheckHotkeyEditor(window,library,sound);CheckMenusAndSpecialHotkeys(window);await CheckPreferencePages(window,temp);Console.WriteLine($"PASS {checks} headless WPF layout checks. No capture, rendering, window activation or OS input.");return;}
             int frameworkDoubleClicks=0;var frameworkControl=new Control();frameworkControl.MouseDoubleClick+=(_,_)=>frameworkDoubleClicks++;
             for(int click=1;click<=20;click++){
@@ -98,6 +99,9 @@ internal static class Program
             grid.SelectedItem=null;
             await (Task)Invoke(window,"HandleActionAsync","play",true)!;
             Check(engine.IsPlaying&&ReferenceEquals(grid.SelectedItem,sound),"the Start playback hotkey starts the first sound on a fresh session without a selected row");
+            var positionBeforePreferences=engine.Position;
+            await CheckPreferenceResponsiveness(window);
+            Check(engine.IsPlaying&&engine.Position>positionBeforePreferences,"muted speaker playback and its timeline continue while Preferences opens and a device scan is held");
             await (Task)Invoke(window,"StopAsync")!;
             grid.SelectedItem=null;FindButton("Play selected file").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             await Until(()=>engine.IsPlaying,"Play button did not start the selected sound");
@@ -313,17 +317,17 @@ internal static class Program
         var dialog=Editor();
         try {
             var body=(FrameworkElement)dialog.Content;body.Measure(new Size(350,400));body.Arrange(new Rect(0,0,350,400));body.UpdateLayout();
-            Check(dialog.Title=="Edit hotkey"&&!Descendants<TextBox>(body).Any()&&Descendants<Button>(body).Any(x=>x.Content as string=="Remove hotkey"),"the shared editor has a capture control and explicit removal instead of an editable shortcut string");
-            var capture=Descendants<Button>(body).Single(x=>AutomationProperties.GetAutomationId(x)=="HotkeyCapture");
+            Check(dialog.Title=="Set hotkey"&&dialog.Width==266&&Descendants<GroupBox>(body).Any(x=>x.Header as string=="Press a key")&&Descendants<Button>(body).Single(x=>AutomationProperties.GetAutomationId(x)=="RemoveHotkey").Visibility==Visibility.Collapsed,"a new hotkey uses the compact reference Set hotkey group with no remove button");
+            var capture=Descendants<TextBox>(body).Single(x=>AutomationProperties.GetAutomationId(x)=="HotkeyCapture");Check(capture.IsReadOnly&&capture.IsReadOnlyCaretVisible&&capture.ActualHeight==23,"the capture field looks like the reference input while recording chords instead of accepting typed shortcut text");
             Invoke(dialog,"Record",new HotkeyInput(162,1,true));
-            Check(!(bool)Invoke(dialog,"ValidateSelection")!&&capture.Content as string=="Ctrl","a modifier preview is visible and cannot be committed as a sound binding");
+            Check(!(bool)Invoke(dialog,"ValidateSelection")!&&capture.Text=="Ctrl","a modifier preview is visible and cannot be committed as a sound binding");
             Invoke(dialog,"Record",new HotkeyInput(75,1,true));
-            Check((bool)Invoke(dialog,"ValidateSelection")!&&capture.Content as string=="Ctrl+K","a captured chord validates without typing its name");
+            Check((bool)Invoke(dialog,"ValidateSelection")!&&capture.Text=="Ctrl+K","a captured chord validates without typing its name");
             foreach(var key in new[]{Key.Escape,Key.Enter,Key.Tab}){
                 var press=new KeyEventArgs(Keyboard.PrimaryDevice,HwndSource.FromHwnd(new WindowInteropHelper(window).Handle)!,Environment.TickCount,key){RoutedEvent=Keyboard.PreviewKeyDownEvent};
                 // The event goes directly to the hidden control, never to Windows.
                 capture.RaiseEvent(press);string expected=key==Key.Enter?"Enter":key.ToString();
-                Check(press.Handled&&capture.Content!.ToString()!.EndsWith(expected),$"the real capture control records {key} without invoking dialog navigation");
+                Check(press.Handled&&capture.Text.EndsWith(expected),$"the real capture control records {key} without invoking dialog navigation");
             }
             Descendants<Button>(body).Single(x=>AutomationProperties.GetAutomationId(x)=="RemoveHotkey").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Check((bool)Invoke(dialog,"ValidateSelection")!&&Field<HotkeyCaptureState>(dialog,"state").Gesture=="","the actual Remove hotkey button creates a valid empty assignment");
@@ -337,6 +341,9 @@ internal static class Program
             new object?[]{"Ctrl+K",isolatedHooks,false,new Func<string,HotkeyConflict>(_=>new(false,true)),new Func<string,bool>(_=>{confirmations++;return allowOverwrite;})},null)!;
         try{
             Check(!(bool)Invoke(duplicate,"ValidateSelection")!&&confirmations==1,"declining overwrite keeps the hotkey dialog open");
+            var editBody=(FrameworkElement)duplicate.Content;editBody.Measure(new Size(278,200));editBody.Arrange(new Rect(0,0,278,200));editBody.UpdateLayout();
+            var remove=Descendants<Button>(editBody).Single(x=>AutomationProperties.GetAutomationId(x)=="RemoveHotkey");var field=Descendants<TextBox>(editBody).Single(x=>AutomationProperties.GetAutomationId(x)=="HotkeyCapture");
+            Check(duplicate.Title=="Edit hotkey"&&duplicate.Width==294&&remove.Visibility==Visibility.Visible&&remove.Content as string=="X"&&ReferenceEquals(remove.Parent,field.Parent),"an assigned hotkey uses the reference Edit hotkey width and inline X removal control");
             allowOverwrite=true;Check((bool)Invoke(duplicate,"ValidateSelection")!&&confirmations==2,"accepting overwrite permits the captured assignment");
         }finally{duplicate.Close();}
 
@@ -552,10 +559,19 @@ internal static class Program
             var body=(FrameworkElement)preferencesWindow.Content;
             void Layout(){body.Measure(new Size(560,700));body.Arrange(new Rect(0,0,560,700));body.UpdateLayout();}
             Layout();var table=Descendants<ListView>(body).Single(x=>AutomationProperties.GetAutomationId(x)=="SpecialHotkeyActions");
+            var columns=((GridView)table.View).Columns;
+            Check(columns.Count==3&&columns[0].Header as string=="Action"&&columns[1].Header as string==""&&columns[1].Width==40&&columns[2].Header as string=="Hotkey","Special Hotkeys has separate Action, aligned value and Hotkey columns like the reference");
+            var plainActions=new HashSet<string>{"selectPrevious","selectNext","selectPreviousCategory","selectNextCategory","jumpBack1","jumpBack2","jumpForward1","jumpForward2","playModeSwitch","autoKeysToggle","hotkeysToggle","hotbarSelectPreviousPage","hotbarSelectNextPage"};
+            foreach(var action in SpecialHotkeyActions.All){
+                var glyph=new SpecialActionIcon {Action=action.Key,Width=16,Height=16};glyph.Measure(new Size(16,16));glyph.Arrange(new Rect(0,0,16,16));glyph.UpdateLayout();
+                var bitmap=new System.Windows.Media.Imaging.RenderTargetBitmap(16,16,96,96,PixelFormats.Pbgra32);bitmap.Render(glyph);var pixels=new byte[1024];bitmap.CopyPixels(pixels,64,0);
+                Check(plainActions.Contains(action.Key)?glyph.Visibility==Visibility.Collapsed:glyph.Visibility==Visibility.Visible&&Enumerable.Range(0,256).Any(i=>pixels[i*4+3]>0),"special-action icon renders the reference artwork/blank state for "+action.Key);
+                if(action.Key is "recordBegin" or "hotkeysDisable" or "autoKeysDisable")Check(Enumerable.Range(0,256).Any(i=>pixels[i*4+2]>pixels[i*4]+40),"recording/disabled action retains its red artwork for "+action.Key);
+            }
             for(int column=0;column<2;column++){
                 Layout();var row=(ListViewItem)table.ItemContainerGenerator.ContainerFromIndex(column);
                 var presenter=Descendants<GridViewRowPresenter>(row).Single();
-                var cell=(UIElement)VisualTreeHelper.GetChild(presenter,column);
+                var cell=(UIElement)VisualTreeHelper.GetChild(presenter,column==0?0:2);
                 var e=Press(cell,MouseButton.Left,2);cell.RaiseEvent(e);
                 Check(e.Handled&&edits.Count==column+1&&edits.Last()==(column==0?"action:stop":"action:play"),"double-clicking the actual "+(column==0?"Action":"Hotkey")+" column opens Set hotkey for the clicked row");
             }
@@ -569,5 +585,21 @@ internal static class Program
             Check(Key(rows[0])=="Ctrl+F21"&&Key(rows[1])=="Ctrl+F22"&&Field<PreferenceStore>(window,"preferenceStore").Settings.ActionHotkeys.Count==0,"column double-click edits stay in the Preferences draft until Apply");
             Check(!preferencesWindow.IsVisible&&!preferencesWindow.IsActive,"Preferences interaction checks leave the real window unshown and inactive");
         }finally{preferencesWindow.Close();}
+        var settings=Field<PreferenceStore>(window,"preferenceStore").Settings;settings.ActionHotkeys["stop"]="Ctrl+F23";
+        bool allow=false;int prompts=0;
+        Func<Window,string,string,IEnumerable<HotkeyAssignment>?,bool?,string?> duplicateEditor=(owner,current,target,actions,sides)=>{
+            using var hooks=new GlobalHotkeyService();var assignments=actions!.ToArray();
+            var editor=new HotkeyCaptureWindow("Ctrl+F23",hooks,false,key=>HotkeyAssignments.Check(assignments,target,key,false),text=>{prompts++;Check(text=="Hotkey is already in use. Overwrite?","a duplicate special key uses the original overwrite question");return allow;});
+            try{return editor.ValidateSelection()?editor.Gesture:null;}finally{editor.Close();}
+        };
+        var duplicatePreferences=new SettingsWindow(window,Field<AudioService>(window,"audio"),Field<PreferenceStore>(window,"preferenceStore"),()=>Task.CompletedTask,duplicateEditor);
+        try{
+            duplicatePreferences.SelectPage("Hotkeys");var body=(FrameworkElement)duplicatePreferences.Content;body.Measure(new Size(560,700));body.Arrange(new Rect(0,0,560,700));body.UpdateLayout();
+            var table=Descendants<ListView>(body).Single(x=>AutomationProperties.GetAutomationId(x)=="SpecialHotkeyActions");table.SelectedIndex=1;
+            string Key(int index)=>(string)table.Items[index].GetType().GetProperty("Hotkey")!.GetValue(table.Items[index])!;
+            Invoke(duplicatePreferences,"SetSpecialHotkey",table);Check(prompts==1&&Key(0)=="Ctrl+F23"&&Key(1)=="","declining the special-action overwrite leaves both draft assignments unchanged");
+            allow=true;Invoke(duplicatePreferences,"SetSpecialHotkey",table);
+            Check(prompts==2&&Key(0)==""&&Key(1)=="Ctrl+F23"&&settings.ActionHotkeys["stop"]=="Ctrl+F23"&&!settings.ActionHotkeys.ContainsKey("play"),"accepting overwrite transfers the key between draft actions and preserves live bindings until Apply");
+        }finally{duplicatePreferences.Close();settings.ActionHotkeys.Remove("stop");}
     }
 }

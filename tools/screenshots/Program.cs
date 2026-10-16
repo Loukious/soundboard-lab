@@ -73,6 +73,13 @@ internal static class Program
                 var tabs=Field<TabControl>(preferences,"tabs");var scroll=(ScrollViewer)((TabItem)tabs.SelectedItem).Content;scroll.ScrollToEnd();
                 await Save(preferences,Path.Combine(output,"audio-forwarding.png"),560,685);
             }finally{preferences.Close();}
+            using(var hooks=new GlobalHotkeyService()){
+                var captureType=typeof(MainWindow).Assembly.GetType("SoundboardLab.HotkeyCaptureWindow")!;
+                foreach(string initial in new[]{"","Ctrl+F2"}){
+                    var capture=(Window)Activator.CreateInstance(captureType,BindingFlags.Instance|BindingFlags.NonPublic,null,new object?[]{initial,hooks,false,new Func<string,HotkeyConflict>(_=>default),null},null)!;
+                    try{await Save(capture,Path.Combine(output,initial.Length==0?"set-hotkey.png":"edit-hotkey.png"),capture.Width-16,145);}finally{capture.Close();}
+                }
+            }
             var editorType=typeof(MainWindow).Assembly.GetType("SoundboardLab.EditorWindow")!;
             var editor=(Window)Activator.CreateInstance(editorType,[library.Document.Entries[0].FilePath,new Func<string,Task>(_=>Task.CompletedTask),prefs.Settings])!;
             try{await (Task)Invoke(editor,"LoadAsync")!;await Save(editor,Path.Combine(output,"sound-editor.png"),680,410);}finally{editor.Close();}

@@ -6,6 +6,8 @@ use `v` followed by the app version; prereleases use a suffix such as `-rc.1`.
 
 ## [Unreleased]
 
+- Restore Special Hotkeys action icons and the separate action/value/hotkey columns from the reference.
+- Allow confirmed overwrites between special actions within the Preferences draft and match the compact Set/Edit hotkey capture layout.
 - Keep Preferences responsive during playback by discovering devices once in the background and creating preview audio only on demand.
 - Change the headphones artwork at the original volume bands: muted at 0%, low at 1–33%, medium at 34–66%, and high at 67–100%.
 - Keep held volume clicks accurate before the thumb layout updates, avoiding a jump to zero.

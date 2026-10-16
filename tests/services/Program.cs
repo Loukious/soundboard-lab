@@ -120,6 +120,11 @@ try
     Throws<ArgumentException>(()=>HotkeyAssignments.ClearConflicts(assignments,"own","Ctrl+F3",false),"A protected special hotkey was overwritten.");
     HotkeyAssignments.ClearConflicts(assignments,"own","Ctrl+F2",false);
     Check(normalKey==""&&specialKey=="Ctrl+F3"&&ownKey=="Ctrl+F4","Confirmed reassignment cleared unrelated bindings.");
+    string otherSpecial="";var specialAssignments=assignments.Append(new HotkeyAssignment("other-special",()=>otherSpecial,value=>otherSpecial=value,true)).ToArray();
+    var specialConflict=HotkeyAssignments.Check(specialAssignments,"other-special","Ctrl+F3",false);
+    Check(!specialConflict.Blocked&&specialConflict.Overwrite&&specialKey=="Ctrl+F3","A special action must offer overwrite for another special action without mutating it during validation.");
+    HotkeyAssignments.ClearConflicts(specialAssignments,"other-special","Ctrl+F3",false);otherSpecial="Ctrl+F3";
+    Check(specialKey==""&&otherSpecial=="Ctrl+F3"&&ownKey=="Ctrl+F4","Confirmed special-action reassignment must clear the previous special action and preserve unrelated keys.");
     using(var suspended=new GlobalHotkeyService()){
         suspended.Configure([new("F24","stop"),new("Ctrl+F24","hotkeysEnable")]);
         using(suspended.BeginCapture(_=>true,installHooks:false)){
