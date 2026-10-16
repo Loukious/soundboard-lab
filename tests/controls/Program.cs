@@ -174,6 +174,9 @@ internal static class Program
         Check(Field<object?>(window,"applicationSessionVolume") is null&&typeof(AudioService).GetProperty("ApplicationVolume",BindingFlags.Static|BindingFlags.NonPublic)!.GetValue(null) is null,"hidden UI checks never start the application's Windows Mixer stream or volume controller");
         var added=new List<SoundEntry>();foreach(string title in new[]{"Amber tone","Amber bell","Blue tone"}){string file=Path.Combine(temp,title+".wav");File.Copy(existing.FilePath,file);var entry=library.AddFiles([file]).Single();entry.Title=title;added.Add(entry);}
         var search=Field<TextBox>(window,"SearchBox");Field<FrameworkElement>(window,"SearchPanel").Visibility=Visibility.Visible;await Layout();
+        var searchPanel=Field<FrameworkElement>(window,"SearchPanel");var searchControls=Field<FrameworkElement>(window,"SearchControls");
+        Check(searchPanel.ActualHeight==26&&search.ActualWidth==236&&searchControls.HorizontalAlignment==HorizontalAlignment.Right&&Math.Abs(searchControls.TranslatePoint(new Point(searchControls.ActualWidth,0),searchPanel).X-(searchPanel.ActualWidth-4))<1,"search uses the reference's compact right-aligned field and 26-pixel row");
+        Check(Field<Button>(window,"SearchNextButton").ActualWidth==24&&Field<Button>(window,"CloseSearchButton").ActualWidth==24,"search navigation and close use the reference's compact bordered button size");
         search.Text="Amber";await Layout();
         Check(grid.Items.Count==4&&ReferenceEquals(grid.SelectedItem,added[0]),"incremental search selects the first match while preserving every row");
         Field<Button>(window,"SearchNextButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
