@@ -6,6 +6,8 @@ use `v` followed by the app version; prereleases use a suffix such as `-rc.1`.
 
 ## [Unreleased]
 
+- Keep held volume clicks accurate before the thumb layout updates, avoiding a jump to zero.
+- Use the original headphones artwork and native mute-cross placement at each display DPI.
 - Match the compact right-aligned search strip and its bordered buttons.
 - Put grey volume percentages beneath the pointer and keep dragging outside the slider until release.
 - Update the app slider during Windows Mixer changes through Core Audio notifications, without feedback writes.
