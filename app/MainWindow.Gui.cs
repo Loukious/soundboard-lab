@@ -23,7 +23,13 @@ public sealed class GuiValueConverter : IValueConverter, IMultiValueConverter
         _ => value
     };
     public object ConvertBack(object value, Type type, object parameter, CultureInfo culture) => Binding.DoNothing;
-    public object Convert(object[] values,Type type,object parameter,CultureInfo culture)=>values.Length>=3&&values[0] is int index?values[index%2==0?1:2]:DependencyProperty.UnsetValue;
+    public object Convert(object[] values,Type type,object parameter,CultureInfo culture)
+    {
+        if(parameter as string=="SoundForeground" && values.Length>=2)
+            return values[0] is string foreground && SoundColors.TryColor(foreground,out var color)?(color.R+color.G+color.B<=432?Brushes.White:Brushes.Black):values[1];
+        if(values.Length>=4&&values[3] is string background&&SoundColors.TryColor(background,out var fill))return new SolidColorBrush(fill);
+        return values.Length>=3&&values[0] is int index?values[index%2==0?1:2]:DependencyProperty.UnsetValue;
+    }
     public object[] ConvertBack(object value,Type[] types,object parameter,CultureInfo culture)=>types.Select(_=>Binding.DoNothing).ToArray();
 }
 

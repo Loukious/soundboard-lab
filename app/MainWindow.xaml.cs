@@ -206,7 +206,7 @@ public partial class MainWindow : Window
             int selectedSlot = slot;
             var context = new ContextMenu();
             var assign = new MenuItem { Header = "Set hotkey…" }; assign.Click += (_,_)=> { if(EditHotkey(this,gesture??"","hotbar:"+selectedSlot) is {} value) Guard(()=>AssignHotkey("hotbar:"+selectedSlot,value)); };context.Items.Add(assign);
-            if(entry is not null) { var color=new MenuItem {Header="Color…"};color.Click+=(_,_)=>{SoundGrid.SelectedItem=entry;Color_Click(this,new());};context.Items.Add(color); var remove=new MenuItem {Header="Remove from hotbar"};remove.Click+=(_,_)=>{if(pin is not null)library.Document.HotbarPins.Remove(pin);};context.Items.Add(remove); }
+            if(entry is not null) { var color=new MenuItem {Header="Color…"};color.Click+=(_,_)=>{SoundGrid.SelectedItem=entry;SetHotbarSoundColor(entry);};context.Items.Add(color); var remove=new MenuItem {Header="Remove from hotbar"};remove.Click+=(_,_)=>{if(pin is not null)library.Document.HotbarPins.Remove(pin);};context.Items.Add(remove); }
             button.ContextMenu=context;
             button.Click += async (_, _) => { if (entry is not null) {var previousSelection=Selected;await PlayEntryAsync(entry);if(!Settings.SelectHotbarSound)SoundGrid.SelectedItem=previousSelection;} };
             button.AllowDrop = true;
@@ -223,6 +223,7 @@ public partial class MainWindow : Window
     private void SoundGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateCategoryInformation();
     private async void SoundGrid_PlayMouseDown(object sender, MouseButtonEventArgs e)
     {
+        if(PaintSoundRow(e))return;
         // WPF's MouseDoubleClick only fires for count == 2. A rapid burst keeps
         // counting 3, 4, 5...; use each even press to match native click pairs.
         if(e.ChangedButton!=MouseButton.Left||e.ClickCount<2||(e.ClickCount&1)!=0)return;
@@ -290,6 +291,7 @@ public partial class MainWindow : Window
         {
             await playTransition.WaitAsync(playToken);entered=true;
             CancelSeekGesture();
+            if(!File.Exists(entry.FilePath))throw new FileNotFoundException("Sound file not found.",entry.FilePath);
             double? resume=Settings.AllowResumeInAnotherMode&&audio.IsPaused&&playingEntry?.Id==entry.Id?audio.Position.TotalSeconds:null;userStopped = false;
             bool retrigger=audio.IsPlaying&&lastDestination==target&&playingFromHotkey==fromHotkey&&!resume.HasValue;
             if(!retrigger){await autoKeys.EndPlaybackAsync();ducker?.Dispose();ducker=null;}
@@ -301,6 +303,7 @@ public partial class MainWindow : Window
             await autoKeys.BeginPlaybackAsync(playToken,fromHotkey,target!=PlaybackDestination.Speakers);
             await audio.PlayAsync(path, target, playToken);if(resume.HasValue)audio.Seek(TimeSpan.FromSeconds(resume.Value));
             playToken.ThrowIfCancellationRequested();
+            entry.IsMissing=false;
             playingEntry = entry;playingPath=entry.FilePath;lastDestination=target;playingFromHotkey=fromHotkey;if(!resume.HasValue)library.MarkPlayed(entry); hadPlayback = true;UpdateDucking();
             if(!firstSoundPlayed){firstSoundPlayed=true;if(Settings.NotifyFirstSound&&target!=PlaybackDestination.Both)Notify("mode-"+target.ToString().ToLowerInvariant());}
             NowPlaying.Text = entry.Title; SoundGrid.SelectedItem = entry;StatusText.Visibility=Visibility.Collapsed;
@@ -308,7 +311,7 @@ public partial class MainWindow : Window
             return true;
         }
         catch (OperationCanceledException) { if(entered)autoKeys.EndPlayback();return false; }
-        catch (Exception ex) { if(entered)await audio.StopAsync();autoKeys.EndPlayback(); Log(ex.Message);StatusText.Visibility=Visibility.Visible;StatusText.ToolTip=ex.Message; return false; }
+        catch (Exception ex) { if(entered)await audio.StopAsync();autoKeys.EndPlayback();entry.IsMissing=!File.Exists(entry.FilePath); Log(ex.Message);StatusText.Visibility=Visibility.Visible;StatusText.ToolTip=ex.Message; return false; }
         finally { if(ReferenceEquals(Interlocked.CompareExchange(ref playRequest,null,request),request))request.Dispose();if(entered)playTransition.Release(); }
     }
     private void UpdatePlayback(PlaybackProgressEventArgs progress)
@@ -452,7 +455,8 @@ public partial class MainWindow : Window
     private void MoveCategoryOrder(int direction) { int index = library.Document.Categories.ToList().FindIndex(x => x.Name == selectedCategory); if (index >= 0) library.Document.Categories.Move(index, Math.Clamp(index + direction, 0, library.Document.Categories.Count - 1)); }
     private void Pin_Click(object sender, RoutedEventArgs e) { if (Selected is { } entry) { int page = Math.Max(0, HotbarPage.SelectedIndex); int slot = Enumerable.Range(0, Settings.HotbarRows*Settings.HotbarColumns).FirstOrDefault(i => !library.Document.HotbarPins.Any(x => x.Page == page && x.Slot == i), -1); if (slot < 0) { Log("This hotbar page is full."); return; } library.Pin(entry,page,slot); } }
     private void Unpin_Click(object sender, RoutedEventArgs e) { if (Selected is { } entry) library.Unpin(entry,Math.Max(0,HotbarPage.SelectedIndex)); }
-    private void Color_Click(object sender, RoutedEventArgs e) { if (Selected is { } entry && Prompt("Hotbar color", "Hex color", entry.Color) is { } value) Guard(() => { _ = ColorConverter.ConvertFromString(value); entry.Color = value; var selectedPins=library.Document.HotbarPins.Where(p=>p.SoundId==entry.Id && p.Page==Math.Max(0,HotbarPage.SelectedIndex)).ToArray(); foreach(var pin in selectedPins) foreach(var other in library.Document.HotbarPins.Where(p=>p.Id==pin.Id || (Settings.SameHotbarColors && p.Slot==pin.Slot))) other.Color=value; }); }
+    private void Color_Click(object sender, RoutedEventArgs e) => OpenSoundColorTool();
+    private void SetHotbarSoundColor(SoundEntry entry) { if (Prompt("Hotbar color", "Hex color", entry.Color) is { } value) Guard(() => { _ = ColorConverter.ConvertFromString(value); entry.Color = value; var selectedPins=library.Document.HotbarPins.Where(p=>p.SoundId==entry.Id && p.Page==Math.Max(0,HotbarPage.SelectedIndex)).ToArray(); foreach(var pin in selectedPins) foreach(var other in library.Document.HotbarPins.Where(p=>p.Id==pin.Id || (Settings.SameHotbarColors && p.Slot==pin.Slot))) other.Color=value; }); }
 
     private async void ImportUrl_Click(object sender, RoutedEventArgs e)
     {

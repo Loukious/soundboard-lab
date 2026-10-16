@@ -229,7 +229,7 @@ public sealed class LibraryStore : IDisposable
     }
     private void Checkpoint() { undo.Push(Serialize()); redo.Clear(); }
     private void CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) { SubscribeItems(); if (!restoring) Commit(true); }
-    private void PropertyChanged(object? sender, PropertyChangedEventArgs e) { if (!restoring) Commit(true); }
+    private void PropertyChanged(object? sender, PropertyChangedEventArgs e) { if (sender is SoundEntry && e.PropertyName==nameof(SoundEntry.IsMissing))return; if (!restoring) Commit(true); }
     private void SubscribeItems()
     {
         var current = Document.Entries.Cast<INotifyPropertyChanged>().Concat(Document.Categories).Concat(Document.HotbarPins).Append(Document.RootCategory).ToHashSet();

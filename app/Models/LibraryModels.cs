@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Text.Json.Serialization;
 
 namespace SoundboardLab.Models;
 
@@ -22,12 +23,15 @@ public sealed class SoundEntry : ObservableModel
     private int playCount, hotbarPage, hotbarSlot = -1, order;
     private DateTime? lastPlayed;
     private double durationSeconds;
+    private bool isMissing;
     public string SourceUrl { get; set; } = "";
     public string Artist { get; set; } = "";
     public string MetadataTitle { get; set; } = "";
     public DateTime? AddedOn { get; set; }
     public Guid Id { get => id; set => Set(ref id, value); }
-    public string FilePath { get => filePath; set => Set(ref filePath, value ?? ""); }
+    public string FilePath { get => filePath; set { if(Set(ref filePath, value ?? ""))IsMissing=false; } }
+    [JsonIgnore]
+    public bool IsMissing { get => isMissing; set => Set(ref isMissing, value); }
     public string Title { get => title; set => Set(ref title, value ?? ""); }
     public string Category { get => category; set => Set(ref category, value ?? ""); }
     public string Hotkey { get => hotkey; set => Set(ref hotkey, value ?? ""); }
@@ -78,6 +82,7 @@ public sealed class HotbarPin : ObservableModel
 
 public sealed class AppPreferences
 {
+    public List<string> SoundColorSlots { get; set; } = SoundColorPalette.CreateDefaultSlots();
     public string CaptureDeviceId { get; set; } = "";
     public string RenderDeviceId { get; set; } = "";
     public string ForwardingSource {get;set;}="Foreground app";

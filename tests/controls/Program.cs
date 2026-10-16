@@ -66,6 +66,7 @@ internal static class Program
             var library=Field<LibraryStore>(window,"library");var sound=library.AddFiles([path]).Single();sound.DurationSeconds=4;
             await Task.Delay(30);Layout();
             var grid=Field<DataGrid>(window,"SoundGrid");var volume=Field<Slider>(window,"SpeakerSlider");var engine=Field<AudioService>(window,"audio");
+            await CheckMissingSoundsAndColors(window,library,sound,temp);
             if(layoutOnly){CheckHotkeyEditor(window,library,sound);CheckMenusAndSpecialHotkeys(window);CheckPreferencePages(window,temp);Console.WriteLine($"PASS {checks} headless WPF layout checks. No capture, rendering, window activation or OS input.");return;}
             int frameworkDoubleClicks=0;var frameworkControl=new Control();frameworkControl.MouseDoubleClick+=(_,_)=>frameworkDoubleClicks++;
             for(int click=1;click<=20;click++){
@@ -164,6 +165,43 @@ internal static class Program
             Directory.Delete(temp,true);
         }
         Console.WriteLine($"PASS {checks} headless WPF control checks. No window shown, no mouse or keyboard input sent; playback remained muted.");
+    }
+    private static async Task CheckMissingSoundsAndColors(MainWindow window,LibraryStore library,SoundEntry existing,string temp)
+    {
+        var grid=Field<DataGrid>(window,"SoundGrid");var root=(FrameworkElement)window.Content;
+        async Task Layout(){root.Measure(new Size(1020,660));root.Arrange(new Rect(0,0,1020,660));root.UpdateLayout();await Dispatcher.Yield(DispatcherPriority.ContextIdle);root.UpdateLayout();}
+        string path=Path.Combine(temp,"removed.wav");File.Copy(existing.FilePath,path);var missing=library.AddFiles([path]).Single();
+        library.Save(Path.Combine(temp,"appearance.json"));int undoCount=Field<Stack<string>>(library,"undo").Count;File.Delete(path);await Layout();grid.SelectedItem=missing;
+        bool played=await (Task<bool>)Invoke(window,"PlayEntryAsync",missing,Missing.Value,false)!;await Layout();
+        Check(!played&&missing.IsMissing&&missing.PlayCount==0&&!Field<AudioService>(window,"audio").IsPlaying,"playing a deleted file marks its row missing without starting audio or counting a play");
+        Check(!library.HasUnsavedChanges&&Field<Stack<string>>(library,"undo").Count==undoCount&&!System.Text.Json.JsonSerializer.Serialize(library.Document).Contains("IsMissing"),"missing-file discovery does not dirty, persist or add undo entries to the library");
+        var row=Descendants<DataGridRow>(grid).Single(x=>ReferenceEquals(x.Item,missing));
+        var label=Descendants<DataGridCell>(row).Where(x=>x.Column.Header as string=="Tag").SelectMany(Descendants<TextBlock>).Single();
+        Color muted=((SolidColorBrush)Application.Current.FindResource("Muted")).Color;
+        Check(label.TextDecorations.Any(x=>x.Location==TextDecorationLocation.Strikethrough)&&((SolidColorBrush)label.Foreground).Color==muted,"the selected missing sound is struck through and grey in the actual rendered Tag cell");
+        grid.SelectedItem=existing;await Layout();
+        Check(((SolidColorBrush)row.Foreground).Color==muted,"a missing sound remains grey when selection moves to another row");
+        missing.FilePath=existing.FilePath;await Layout();
+        Check(!missing.IsMissing&&label.TextDecorations.Count==0,"relinking a missing entry restores its normal text decoration");
+        library.Remove([missing]);await Layout();grid.SelectedItem=existing;
+        var color=grid.ContextMenu.Items.OfType<MenuItem>().Single(x=>x.Header as string=="Color");
+        var options=color.Items.OfType<MenuItem>().ToArray();
+        Check(options.First().Header as string=="Open color tool"&&options.Last().Header as string=="Reset color"&&options.Length==23,"the sound color submenu offers the recovered 21 populated slots between Open color tool and Reset color");
+        Check(options.Where(x=>x.Tag is string).All(x=>x.Icon is Border {Background:SolidColorBrush fill}&&fill.Color==(Color)ColorConverter.ConvertFromString((string)x.Tag)),"every numbered sound color has a matching visible color swatch");
+        options.Single(x=>x.Header as string=="Color 14").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));await Layout();grid.SelectedItem=null;await Layout();
+        row=Descendants<DataGridRow>(grid).Single(x=>ReferenceEquals(x.Item,existing));
+        Check(existing.Color=="#F2E71F"&&((SolidColorBrush)row.Background).Color==Color.FromRgb(242,231,31)&&((SolidColorBrush)row.Foreground).Color==Colors.Black,"choosing a bright palette color paints the sound row and uses readable black text");
+        grid.SelectedItem=existing;options.Single(x=>x.Header as string=="Color 3").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));grid.SelectedItem=null;await Layout();
+        Check(((SolidColorBrush)row.Background).Color==Color.FromRgb(9,78,124)&&((SolidColorBrush)row.Foreground).Color==Colors.White,"choosing a dark palette color uses readable white text");
+        grid.SelectedItem=existing;options.Last().RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));await Layout();
+        Check(existing.Color=="#334155","Reset color restores the default row appearance");
+        Invoke(window,"SetSoundColorSlot",23,"#123456");Invoke(window,"PopulateSoundColorMenu",color,new Func<IEnumerable<SoundEntry>>(()=>[existing]));
+        Check(color.Items.OfType<MenuItem>().Single(x=>x.Header as string=="Color 24").Tag as string=="#123456","a populated spare palette slot appears with its original slot number");
+        var preferences=new PreferenceStore(temp);preferences.Load();Check(preferences.Settings.SoundColorSlots[23]=="#123456","custom palette slots survive preference reload");
+        Invoke(window,"SetSoundColorSlot",23,"");Invoke(window,"PopulateSoundColorMenu",color,new Func<IEnumerable<SoundEntry>>(()=>[existing]));
+        var tool=(Window)Invoke(window,"CreateSoundColorTool")!;
+        try{var panel=(FrameworkElement)tool.Content;panel.Measure(new Size(354,300));panel.Arrange(new Rect(0,0,354,300));panel.UpdateLayout();Check(Descendants<Button>(panel).Count(x=>AutomationProperties.GetAutomationId(x).StartsWith("SoundColorSlot"))==24,"Color tool renders all 24 configurable palette slots without opening a window");}finally{tool.Close();}
+        grid.SelectedItem=existing;Field<TextBlock>(window,"StatusText").Visibility=Visibility.Collapsed;
     }
     private static void CheckHotkeyEditor(MainWindow window,LibraryStore library,SoundEntry sound)
     {

@@ -28,6 +28,7 @@ public partial class MainWindow
 
     private void SoundGrid_HotkeyCell_Click(object sender,MouseButtonEventArgs e)
     {
+        if(paintingSoundColor is not null){e.Handled=true;return;}
         if(VisualAncestor<DataGridCell>(e.OriginalSource as DependencyObject) is not {} cell||cell.Column.SortMemberPath!="@Hotkey"||cell.DataContext is not SoundEntry sound)return;
         SoundGrid.SelectedItem=sound;e.Handled=true;
         Dispatcher.BeginInvoke(()=>Hotkey_Click(this,new RoutedEventArgs()));
