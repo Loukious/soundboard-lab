@@ -15,8 +15,9 @@ internal sealed partial class SettingsWindow
     private void SetSpecialHotkey(ListView table)
     {
         if(table.SelectedItem is not HotkeyRow row)return;
-        var assignments=hotkeyRows.Select(x=>new HotkeyAssignment("action:"+x.Action,()=>x.Hotkey,value=>x.Hotkey=value,true));
+        var assignments=hotkeyRows.Select(x=>new HotkeyAssignment("action:"+x.Action,()=>x.Hotkey,value=>x.Hotkey=value,true)).ToArray();
         if(hotkeyEditor(this,row.Hotkey,"action:"+row.Action,assignments,draft.AllowLeftRightModifiers) is not {} key)return;
+        HotkeyAssignments.ClearConflicts(assignments,"action:"+row.Action,key,draft.AllowLeftRightModifiers);
         row.Hotkey=key;table.Items.Refresh();Dirty();
     }
     private void SpecialHotkey_Pressed(object sender,MouseButtonEventArgs e)

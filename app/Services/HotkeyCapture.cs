@@ -44,13 +44,16 @@ public static class HotkeyAssignments
     }
     public static HotkeyConflict Check(IEnumerable<HotkeyAssignment> assignments, string target, string gesture, bool distinguishSides)
     {
-        var matches = assignments.Where(x => x.Id != target && Equal(x.Read(), gesture, distinguishSides)).ToArray();
-        return new(matches.Any(x => x.Special), matches.Any(x => !x.Special));
+        var all=assignments.ToArray();
+        var matches = all.Where(x => x.Id != target && Equal(x.Read(), gesture, distinguishSides)).ToArray();
+        bool blocked=matches.Any(x=>x.Special)&&!all.Any(x=>x.Id==target&&x.Special);
+        return new(blocked,!blocked&&matches.Length>0);
     }
     public static void ClearConflicts(IEnumerable<HotkeyAssignment> assignments, string target, string gesture, bool distinguishSides)
     {
-        var matches = assignments.Where(x => x.Id != target && Equal(x.Read(), gesture, distinguishSides)).ToArray();
-        if (matches.Any(x => x.Special)) throw new ArgumentException("This hotkey is already in use by a special hotkey.");
+        var all=assignments.ToArray();
+        var matches = all.Where(x => x.Id != target && Equal(x.Read(), gesture, distinguishSides)).ToArray();
+        if (matches.Any(x => x.Special)&&!all.Any(x=>x.Id==target&&x.Special)) throw new ArgumentException("This hotkey is already in use by a special hotkey.");
         foreach (var assignment in matches) assignment.Write("");
     }
 }
