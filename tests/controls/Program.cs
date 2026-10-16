@@ -203,6 +203,16 @@ internal static class Program
         var track=(Track)speaker.Template.FindName("PART_Track",speaker);
         var moveVolume=typeof(MainWindow).Assembly.GetType("SoundboardLab.VolumeSliderFeedback")!.GetMethod("SetValueFromPointer",BindingFlags.Static|BindingFlags.NonPublic)!;
         void MoveVolume(double x,double y)=>moveVolume.Invoke(null,[speaker,track,new Point(x,y)]);
+        speaker.Value=.8;await Layout();
+        double thumbWidth=track.Thumb.ActualWidth,travel=track.ActualWidth-thumbWidth;
+        // WPF can change Value before arranging the thumb at its new position.
+        // Reproduce that real mouse-down ordering without capturing the mouse.
+        speaker.Value=.2;MoveVolume(thumbWidth/2+travel*.2,track.ActualHeight/2);
+        Check(Math.Abs(speaker.Value-.2)<.0001,"a track click stays at 20 percent while the thumb's layout still reflects 80 percent");
+        foreach(double ratio in new[]{.4,.65,.15,.9,.2}){
+            MoveVolume(thumbWidth/2+travel*ratio,-200);
+            Check(Math.Abs(speaker.Value-ratio)<.0001,"successive volume positions remain accurate before layout catches up: "+ratio);
+        }
         MoveVolume(track.ActualWidth*.3,-200);double above=speaker.Value;MoveVolume(track.ActualWidth*.7,300);
         Check(above>0&&speaker.Value>above,"volume pointer projection continues horizontally far above and below the slider, without injecting mouse input");
         MoveVolume(-500,-200);bool atStart=speaker.Value==0;MoveVolume(track.ActualWidth+500,300);

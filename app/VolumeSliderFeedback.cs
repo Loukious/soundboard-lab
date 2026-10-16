@@ -10,6 +10,7 @@ internal static class VolumeSliderFeedback
 {
     internal static void Attach(Slider slider,Func<double,double> gain)
     {
+        slider.IsMoveToPointEnabled=false; // This handler owns track clicks as well as thumb drags.
         var popup=new ToolTip {Placement=PlacementMode.RelativePoint,PlacementTarget=slider,StaysOpen=true};
         popup.SetResourceReference(FrameworkElement.StyleProperty,"VolumeFeedbackToolTip");slider.ToolTip=popup;
         ToolTipService.SetIsEnabled(slider,false); // Percentage feedback belongs to a drag, not a hover timer.
@@ -40,8 +41,14 @@ internal static class VolumeSliderFeedback
 
     internal static void SetValueFromPointer(Slider slider,Track track,Point point)
     {
-        // Vertical distance never cancels a horizontal volume drag.
-        double value=track.ValueFromPoint(new Point(point.X,track.ActualHeight/2));
-        if(double.IsFinite(value))slider.SetCurrentValue(Slider.ValueProperty,Math.Clamp(value,slider.Minimum,slider.Maximum));
+        // Track.ValueFromPoint adds a delta to Value using the thumb's last
+        // arranged position. Value can already have changed during this input
+        // event, so that delta would be applied twice until the next layout.
+        // Map the absolute pointer coordinate instead, independent of Value.
+        double thumbWidth=track.Thumb?.ActualWidth??0,travel=track.ActualWidth-thumbWidth;
+        if(travel<=0||!double.IsFinite(point.X))return;
+        double ratio=Math.Clamp((point.X-thumbWidth/2)/travel,0,1);
+        if(track.IsDirectionReversed)ratio=1-ratio;
+        slider.SetCurrentValue(Slider.ValueProperty,slider.Minimum+ratio*(slider.Maximum-slider.Minimum));
     }
 }
