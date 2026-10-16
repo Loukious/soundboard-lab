@@ -197,6 +197,13 @@ internal static class Program
         Check(speaker.ToolTip is ToolTip {Content:"37%",IsOpen:false}&&clip.ToolTip is ToolTip {Content:"150%",IsOpen:false},"speaker and microphone sliders maintain percentage feedback without opening test popups");
         var volumeTip=(ToolTip)speaker.ToolTip;
         Check(volumeTip.Placement==PlacementMode.RelativePoint&&ReferenceEquals(volumeTip.PlacementTarget,speaker)&&volumeTip.Background is SolidColorBrush {Color:{R:51,G:51,B:51}}&&volumeTip.Template is not null,"volume feedback uses a grey template positioned relative to the pointer, rather than the thumb");
+        var track=(Track)speaker.Template.FindName("PART_Track",speaker);
+        var moveVolume=typeof(MainWindow).Assembly.GetType("SoundboardLab.VolumeSliderFeedback")!.GetMethod("SetValueFromPointer",BindingFlags.Static|BindingFlags.NonPublic)!;
+        void MoveVolume(double x,double y)=>moveVolume.Invoke(null,[speaker,track,new Point(x,y)]);
+        MoveVolume(track.ActualWidth*.3,-200);double above=speaker.Value;MoveVolume(track.ActualWidth*.7,300);
+        Check(above>0&&speaker.Value>above,"volume pointer projection continues horizontally far above and below the slider, without injecting mouse input");
+        MoveVolume(-500,-200);bool atStart=speaker.Value==0;MoveVolume(track.ActualWidth+500,300);
+        Check(atStart&&speaker.Value==1,"captured volume drags clamp at either end outside the track");
         settings.LinearVolumeSlider=false;speaker.Value=.5;Check(((ToolTip)speaker.ToolTip).Content as string=="25%","nonlinear slider feedback displays the applied gain");settings.LinearVolumeSlider=true;speaker.Value=0;clip.Value=1;
         bool initialized=Field<bool>(window,"initialized");typeof(MainWindow).GetField("initialized",Private)!.SetValue(window,false);
         try{
