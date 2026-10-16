@@ -1,5 +1,6 @@
 ﻿using System.IO;
 using System.Text.Json;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -13,6 +14,7 @@ namespace SoundboardLab;
 
 internal static class CategoryIcons
 {
+    internal static bool UsesGeneratedIcon(CategoryEntry category)=>category.IconMode=="Generated"||(category.IconMode=="Stock"&&category.StockIcon=="Folder"&&!category.IconModeExplicit);
     internal static readonly Dictionary<string,string> Stock=new(){
         ["Home"]="M0,8 L8,0 16,8 H13 V16 H10 V11 H6 V16 H3 V8 Z",
         ["Folder"]="M0,2 H6 L8,4 H16 V14 H0 Z",
@@ -26,7 +28,7 @@ internal static class CategoryIcons
         if(category.IconMode=="Custom"&&File.Exists(category.IconPath)){
             try{using var stream=File.OpenRead(category.IconPath);var bitmap=new BitmapImage();bitmap.BeginInit();bitmap.CacheOption=BitmapCacheOption.OnLoad;bitmap.StreamSource=stream;bitmap.EndInit();bitmap.Freeze();return new Image {Source=bitmap,Width=size,Height=size,Stretch=Stretch.Uniform};}catch(Exception ex)when(ex is IOException or NotSupportedException or FileFormatException){}
         }
-        if(category.IconMode=="Generated")return new Border {Width=size,Height=size,Background=color,CornerRadius=new(2),Child=new TextBlock {Text=label.Length>0?label[..1].ToUpperInvariant():"?",Foreground=Brushes.White,FontWeight=FontWeights.Bold,FontSize=size*.65,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center}};
+        if(UsesGeneratedIcon(category))return new Border {Width=size,Height=size,Background=color,CornerRadius=new(2),Child=new TextBlock {Text=label.TrimStart().Length>0?StringInfo.GetNextTextElement(label.TrimStart()).ToUpperInvariant():"?",Foreground=Brushes.White,FontWeight=FontWeights.Bold,FontSize=size*.65,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center}};
         return new System.Windows.Shapes.Path {Data=Geometry.Parse(Stock.GetValueOrDefault(category.StockIcon,Stock["Folder"])),Fill=color,Width=size,Height=size,Stretch=Stretch.Uniform};
     }
 }
@@ -37,6 +39,7 @@ internal sealed class CategoryEditWindow : Window
     public CategoryEditWindow(CategoryEntry category, Func<Window,string,string?> editHotkey)
     {
         Value=JsonSerializer.Deserialize<CategoryEntry>(JsonSerializer.Serialize(category))!;
+        if(CategoryIcons.UsesGeneratedIcon(Value))Value.IconMode="Generated";
         Title="Edit category";Width=386;Height=345;ResizeMode=ResizeMode.NoResize;WindowStartupLocation=WindowStartupLocation.CenterOwner;Background=SystemColors.ControlBrush;
         Resources.MergedDictionaries.Add(new(){Source=new Uri("/SoundboardLab;component/SettingsResources.xaml",UriKind.Relative)});
         var root=new DockPanel {Margin=new(10,12,10,10)};Content=root;
@@ -51,7 +54,7 @@ internal sealed class CategoryEditWindow : Window
         Button browse=new(){Content="Browse",HorizontalAlignment=HorizontalAlignment.Left};choices.Children.Add(browse);
         var palette=CategoryColors.All.ToList();if(Value.IconColor.Length>0&&!palette.Any(x=>x.Value.Equals(Value.IconColor,StringComparison.OrdinalIgnoreCase)))palette.Add(new("Custom color",Value.IconColor));
         var color=new ComboBox {ItemsSource=palette,SelectedItem=palette.FirstOrDefault(x=>x.Value.Equals(Value.IconColor,StringComparison.OrdinalIgnoreCase))??palette[0],ItemTemplate=CategoryColors.Template(),MinWidth=0,MaxDropDownHeight=252};AutomationProperties.SetAutomationId(color,"CategoryIconColor");choices.Children.Add(color);
-        foreach(string mode in new[]{"Generated","Stock","Custom"}){var radio=new RadioButton {Content=mode,GroupName="CategoryIconMode",IsChecked=Value.IconMode==mode};AutomationProperties.SetAutomationId(radio,"CategoryIcon"+mode);radio.Checked+=(_,_)=>{Value.IconMode=mode;color.IsEnabled=mode!="Custom";browse.IsEnabled=mode!="Generated";Preview();};modes.Children.Add(radio);}
+        foreach(string mode in new[]{"Generated","Stock","Custom"}){var radio=new RadioButton {Content=mode,GroupName="CategoryIconMode",IsChecked=Value.IconMode==mode};AutomationProperties.SetAutomationId(radio,"CategoryIcon"+mode);radio.Checked+=(_,_)=>{Value.IconMode=mode;Value.IconModeExplicit=true;color.IsEnabled=mode!="Custom";browse.IsEnabled=mode!="Generated";Preview();};modes.Children.Add(radio);}
         color.SelectionChanged+=(_,_)=>{if(color.SelectedItem is CategoryColor selected)Value.IconColor=selected.Value;Preview();};
         browse.Click+=(_,_)=>{if(Value.IconMode=="Custom"){var file=new OpenFileDialog {Filter="Images|*.png;*.ico;*.jpg;*.jpeg;*.bmp"};if(file.ShowDialog(this)==true){Value.IconPath=file.FileName;Preview();}}else{var picker=new Window {Title="Choose icon",Owner=this,Width=300,Height=210,WindowStartupLocation=WindowStartupLocation.CenterOwner,Background=SystemColors.ControlBrush};picker.Resources.MergedDictionaries.Add(new(){Source=new Uri("/SoundboardLab;component/SettingsResources.xaml",UriKind.Relative)});var grid=new System.Windows.Controls.Primitives.UniformGrid {Columns=3,Margin=new(12)};picker.Content=grid;foreach(string stock in CategoryIcons.Stock.Keys){var button=new Button {Content=CategoryIcons.Create(new(){StockIcon=stock,IconColor=Value.IconColor},stock,32,(Brush)Application.Current.FindResource("Accent")),ToolTip=stock,MinWidth=0};button.Click+=(_,_)=>{Value.StockIcon=stock;picker.Close();Preview();};grid.Children.Add(button);}picker.ShowDialog();}};
         name.TextChanged+=(_,_)=>Preview();Preview();browse.IsEnabled=Value.IconMode!="Generated";color.IsEnabled=Value.IconMode!="Custom";

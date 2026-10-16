@@ -47,11 +47,12 @@ public sealed class SoundEntry : ObservableModel
 
 public sealed class CategoryEntry : ObservableModel
 {
-    private string name = "", parent = "", hotkey = "",iconMode="Stock",stockIcon="Folder",iconPath="",iconColor="";
+    private string name = "", parent = "", hotkey = "",iconMode="Generated",stockIcon="Folder",iconPath="",iconColor="";
     public string Name { get => name; set => Set(ref name, value ?? ""); }
     public string Parent { get => parent; set => Set(ref parent, value ?? ""); }
     public string Hotkey { get => hotkey; set => Set(ref hotkey, value ?? ""); }
-    public string IconMode {get=>iconMode;set=>Set(ref iconMode,value??"Stock");}
+    public string IconMode {get=>iconMode;set=>Set(ref iconMode,value??"Generated");}
+    public bool IconModeExplicit {get;set;}
     public string StockIcon {get=>stockIcon;set=>Set(ref stockIcon,value??"Folder");}
     public string IconPath {get=>iconPath;set=>Set(ref iconPath,value??"");}
     public string IconColor {get=>iconColor;set=>Set(ref iconColor,value??"");}
@@ -61,7 +62,7 @@ public sealed class CategoryEntry : ObservableModel
 public sealed class LibraryDocument
 {
     public int Version { get; set; } = 1;
-    public CategoryEntry RootCategory {get;set;}=new(){Name="My Sounds",StockIcon="Home"};
+    public CategoryEntry RootCategory {get;set;}=new(){Name="My Sounds",IconMode="Stock",StockIcon="Home"};
     public ObservableCollection<SoundEntry> Entries { get; set; } = [];
     public ObservableCollection<CategoryEntry> Categories { get; set; } = [];
     public ObservableCollection<HotbarPin> HotbarPins { get; set; } = [];

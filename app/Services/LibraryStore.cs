@@ -105,7 +105,7 @@ public sealed class LibraryStore : IDisposable
         if(string.IsNullOrWhiteSpace(settings.Name))throw new ArgumentException("A category name is required.");
         var category=path=="*"?Document.RootCategory:Document.Categories.Single(x=>x.Name==path);
         if(path!="*"&&path!=settings.Name)RenameCategoryCore(path,settings.Name);
-        category.Name=settings.Name;category.Hotkey=settings.Hotkey;category.IconMode=settings.IconMode;category.StockIcon=settings.StockIcon;category.IconPath=settings.IconPath;category.IconColor=settings.IconColor;
+        category.Name=settings.Name;category.Hotkey=settings.Hotkey;category.IconMode=settings.IconMode;category.IconModeExplicit=settings.IconModeExplicit;category.StockIcon=settings.StockIcon;category.IconPath=settings.IconPath;category.IconColor=settings.IconColor;
     });
     public void RemoveCategory(string name) => Batch(() => {
         foreach (var c in Document.Categories.Where(c => c.Name == name || c.Name.StartsWith(name + "/", StringComparison.Ordinal)).ToArray()) Document.Categories.Remove(c);
@@ -272,7 +272,7 @@ public sealed class LibraryStore : IDisposable
             if (entry.Id == Guid.Empty || !ids.Add(entry.Id)) throw new InvalidDataException("Library contains invalid or duplicate sound identifiers.");
             entry.FilePath = Path.GetFullPath(entry.FilePath, directory);
         }
-        document.RootCategory ??=new(){Name="My Sounds",StockIcon="Home"};
+        document.RootCategory ??=new(){Name="My Sounds",IconMode="Stock",StockIcon="Home"};
         NormalizeImportedHome(document);
         if (document.Categories.Any(c => c is null || string.IsNullOrWhiteSpace(c.Name))) throw new InvalidDataException("Library contains an invalid category.");
         foreach(var category in document.Categories.Prepend(document.RootCategory))if(!string.IsNullOrWhiteSpace(category.IconPath))category.IconPath=Path.GetFullPath(category.IconPath,directory);
