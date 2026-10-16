@@ -13,6 +13,7 @@
 | Services | Library recovery/export, persistence, simulated hotkey dispatch/capture/conflicts, Auto Keys, pipes, toggle/hold forwarding, key/modifier release, repeat rejection, cancellation during startup. |
 | WPF, layout-only | Actual hidden controls, search navigation, category initials/editor labels/count alignment, status highlights, percentage feedback, missing sounds/color swatches, hotkey editors, menus, Preferences layouts/dependencies, forwarding controls/default-off state, unshown device setup. No playback/capture. |
 | Installer plan | Pure fixtures preserving/chaining/restoring vendor effects across mode changes, repair, invalid-backup rejection. Scripts are parsed without running setup. |
+| Compiled device setup | In-memory installation, repair, mode changes, selection changes and restoration, including rollback after partial writes, backup failures and removal failures. Published helper/IPC runs a read-only configuration check without elevation. |
 | GUI helper | Repeated PowerShell helper loading and refusal to run interactive tests without explicit opt-in. |
 
 CI does not install an APO, restart Windows Audio, change volume, send OS input, or show windows. It skips physical audio endpoints and installed speech voices; successful CI does not claim live microphone/voice-app compatibility.

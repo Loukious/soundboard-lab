@@ -41,6 +41,15 @@ if(-not $SkipPublish) {
     New-Item -ItemType Directory -Path $artifactRoot -Force | Out-Null
     & dotnet publish (Join-Path $projectRoot 'app\SoundboardLab.csproj') -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -o $package --verbosity minimal
     if($LASTEXITCODE -ne 0){throw 'Self-contained publish failed.'}
+    if(-not $SkipTests){
+        # Exercises the real compiled helper/IPC and reads existing configuration;
+        # no UAC, windows, endpoint writes, streams or service changes.
+        $setupCheck=Start-Process -FilePath (Join-Path $package 'SoundboardLab.exe') -ArgumentList '--check-device-setup' -PassThru -WindowStyle Hidden
+        if(-not $setupCheck.WaitForExit(30000)){throw 'Compiled device setup helper check timed out.'}
+        if($setupCheck.ExitCode -ne 0){throw 'Compiled device setup helper check failed.'}
+        Write-Output 'PASS compiled device setup helper and read-only configuration check'
+        $setupCheck.Dispose()
+    }
     $smokeVerified=$false
     if($RunInteractiveTests){
     $smokeState=Join-Path $projectRoot 'tests\published-state-preview'

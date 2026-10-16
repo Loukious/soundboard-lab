@@ -9,6 +9,7 @@ string temp = Path.Combine(Path.GetTempPath(), "SoundboardLab-service-tests-" + 
 Directory.CreateDirectory(temp);
 try
 {
+    EndpointSetupTests.Run(Check);
     using(var lease=new InstanceLease(temp)){Throws<IOException>(()=>{using var duplicateLease=new InstanceLease(temp);},"Two instances acquired the same library lease.");using var independentLease=new InstanceLease(Path.Combine(temp,"isolated"));Check(true,"Independent data directories could not acquire separate instance leases.");}
     using(var recoveredLease=new InstanceLease(temp))Check(true,"Instance lease was not released on shutdown.");
     string audio = Path.Combine(temp, "clip.wav"); File.WriteAllBytes(audio, [0, 1, 2, 3]);

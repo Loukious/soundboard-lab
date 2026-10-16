@@ -21,7 +21,7 @@ internal sealed partial class SettingsWindow
         var mode=new ComboBox {ItemsSource=new[]{"PostMix","Stream","Mode","Endpoint"},SelectedItem=current,Width=105};AutomationProperties.SetAutomationId(mode,"CaptureSetupMode");controls.Children.Add(mode);
         var applyMode=new Button {Content="Apply"};applyMode.Click+=async(_,_)=>{
             dialog.IsEnabled=false;
-            try{await main.ChangeCaptureSetupModeAsync(device.Id,(string)mode.SelectedItem);current=(string)mode.SelectedItem;refresh();value.Text=CaptureDeviceConfiguration.IsInstalled(device.Id)?"Good":"Repair required";value.Foreground=CaptureDeviceConfiguration.IsInstalled(device.Id)?Brushes.Green:Brushes.Red;applyModeState();}
+            try{await main.ChangeCaptureSetupModeAsync(device.Id,(string)mode.SelectedItem);current=(string)mode.SelectedItem;refresh();bool installed=CaptureDeviceConfiguration.IsInstalled(device.Id);Localization.SetText(value,installed?"Good":"Repair required");value.Foreground=installed?Brushes.Green:Brushes.Red;applyModeState();}
             catch(Exception ex){Dialogs.Error(dialog,ex);}
             finally{dialog.IsEnabled=true;}
         };controls.Children.Add(applyMode);

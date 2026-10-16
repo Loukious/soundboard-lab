@@ -8,6 +8,14 @@ public partial class App : Application
     private InstanceLease? instanceLease;
     private void App_Startup(object sender, StartupEventArgs e)
     {
+        if(e.Args is ["--check-device-setup"]){
+            int code;try{Task.Run(()=>Audio.DeviceSetupClient.RunAsync(new("probe",[]))).GetAwaiter().GetResult();code=0;}catch{code=1;}
+            Shutdown(code);return;
+        }
+        if(Audio.DeviceSetupClient.IsHelperInvocation(e.Args)){
+            int code;try{code=Audio.DeviceSetupClient.RunHelperAsync(e.Args).GetAwaiter().GetResult();}catch{code=2;}
+            Shutdown(code);return;
+        }
         bool isolated=e.Args.Contains("--pipe-name")||e.Args.Contains("--smoke-test");
         if(!isolated&&Process.GetProcessesByName("SoundboardLab").Any(x=>{using(x)return x.Id!=Environment.ProcessId;})){
             MessageBox.Show("Soundboard Lab is already running. Exit the other preview from its tray menu before starting this version.","Soundboard Lab",MessageBoxButton.OK,MessageBoxImage.Information);Shutdown();return;

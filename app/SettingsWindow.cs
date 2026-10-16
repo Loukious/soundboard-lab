@@ -197,7 +197,7 @@ internal sealed partial class SettingsWindow : Window
             PreferenceStore.Validate(draft);_=ColorConverter.ConvertFromString(draft.ToolbarColor);
             var previous=Clone(store.Settings);
             string[] previousIds=previous.CaptureDeviceIds.Count>0?previous.CaptureDeviceIds.ToArray():[string.IsNullOrWhiteSpace(previous.CaptureDeviceId)?deviceSnapshot?.DefaultCaptureId??"":previous.CaptureDeviceId];
-            if(!previousIds.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(draft.CaptureDeviceIds))await main.ConfigureCaptureDevicesAsync(draft.CaptureDeviceIds);
+            if(!previousIds.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(draft.CaptureDeviceIds)){await main.ConfigureCaptureDevicesAsync(draft.CaptureDeviceIds);await RefreshDevicesAsync();}
             var restoreHotkeys=main.PrepareSpecialHotkeyAssignments(draft);
             Copy(draft,store.Settings);
             try {await apply();store.Save();}catch{Copy(previous,store.Settings);restoreHotkeys();await apply();throw;}

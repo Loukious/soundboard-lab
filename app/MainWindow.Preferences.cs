@@ -82,24 +82,19 @@ public partial class MainWindow
     }
     internal async Task ConfigureCaptureDevicesAsync(IEnumerable<string> selection,bool repair=false)
     {
+        if(audio.IsRecording)throw new InvalidOperationException("Stop recording before changing recording-device configuration.");
         await StopForwardingAsync();
-        string[] ids=selection.Distinct().ToArray();if(ids.Length==0)throw new ArgumentException("Check at least one recording device.");
-        string file=Path.Combine(stateDirectory,"device-selection-"+Guid.NewGuid()+".json");File.WriteAllText(file,JsonSerializer.Serialize(ids));
-        try{await RunElevatedScriptAsync("Configure-Devices.ps1",new[]{"-SelectionFile",file,"-DllPath",Path.Combine(AppContext.BaseDirectory,"SoundboardLab.Audio.dll")}.Concat(repair?new[]{"-Repair"}:Array.Empty<string>()));StopMicMonitor();}
-        finally{File.Delete(file);}
+        await StopAsync();StopMicMonitor();
+        string[] ids=selection.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();if(ids.Length==0)throw new ArgumentException("Check at least one recording device.");
+        await DeviceSetupClient.RunAsync(new("configure",ids,repair));StopMicMonitor();
     }
-    internal async Task RestartWindowsAudioAsync(){await StopForwardingAsync();StopMicMonitor();await RunElevatedScriptAsync("Restart-Audio.ps1",[]);RefreshStatus();}
+    internal async Task RestartWindowsAudioAsync(){await StopForwardingAsync();StopMicMonitor();await DeviceSetupClient.RunAsync(new("restart",[]));RefreshStatus();}
     internal async Task ChangeCaptureSetupModeAsync(string endpoint,string slot)
     {
         if(slot is not ("PostMix" or "Stream" or "Mode" or "Endpoint"))throw new ArgumentException("Invalid setup mode.");
+        if(audio.IsRecording)throw new InvalidOperationException("Stop recording before changing recording-device configuration.");
         await StopForwardingAsync();await StopAsync();StopMicMonitor();
-        await RunElevatedScriptAsync("Install-Microphone.ps1",["-EndpointId",endpoint,"-DllPath",Path.Combine(AppContext.BaseDirectory,"SoundboardLab.Audio.dll"),"-EffectSlot",slot,"-Repair","-ChangeEffectSlot"]);
-    }
-    private async Task RunElevatedScriptAsync(string script,IEnumerable<string> args)
-    {
-        var start=new ProcessStartInfo("powershell.exe"){UseShellExecute=true,Verb="runas",WindowStyle=ProcessWindowStyle.Hidden};
-        foreach(string arg in new[]{"-NoProfile","-ExecutionPolicy","Bypass","-File",Path.Combine(AppContext.BaseDirectory,"installer",script)}.Concat(args))start.ArgumentList.Add(arg);
-        using var process=Process.Start(start)??throw new InvalidOperationException("Device setup could not start.");await process.WaitForExitAsync();if(process.ExitCode!=0)throw new InvalidOperationException("Device setup did not complete. The selected audio component may need a Windows Audio restart.");
+        await DeviceSetupClient.RunAsync(new("install",[endpoint],true,slot));
     }
     private void ApplyStartupSetting()
     {

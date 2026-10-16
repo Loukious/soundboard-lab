@@ -3,4 +3,5 @@
   <ItemGroup><Compile Include="../../app/Models/*.cs" Link="Models/%(Filename)%(Extension)"/><Compile Include="../../app/Services/InstanceLease.cs"/><Compile Include="../../app/Services/LibraryStore.cs"/><Compile Include="../../app/Services/PreferenceStore.cs"/><Compile Include="../../app/Services/GlobalHotkeyService.cs"/><Compile Include="../../app/Services/AutoKeyService.cs"/><Compile Include="../../app/Services/AutoKeyCoordinator.cs"/><Compile Include="../../app/Services/RemoteControlServer.cs"/></ItemGroup>
   <ItemGroup><Compile Include="../../app/Services/HotkeyCapture.cs"/></ItemGroup>
   <ItemGroup><Compile Include="../../app/Services/ForwardingController.cs"/></ItemGroup>
+  <ItemGroup><Compile Include="../../app/Audio/EndpointInstallPlan.cs"/></ItemGroup>
 </Project>

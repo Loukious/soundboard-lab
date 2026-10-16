@@ -80,26 +80,18 @@ internal sealed class MicrophoneSetupWindow : Window
         var slot = new ComboBox { ItemsSource = new[] { "PostMix", "Stream", "Mode", "Endpoint" }, SelectedIndex = 0 }; panel.Children.Add(new TextBlock { Text = "Compatibility mode", Margin = new(5, 12, 0, 2) }); panel.Children.Add(slot);
         var status = new TextBlock { Text = audio.GetInjectionStatus().Message, TextWrapping = TextWrapping.Wrap, Margin = new(5, 12, 0, 12) }; panel.Children.Add(status);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal }; panel.Children.Add(buttons);
-        async Task Run(string script, bool install)
+        async Task Run(bool install)
         {
             if (devices.SelectedItem is not AudioDevice device) throw new InvalidOperationException("Select a microphone.");
-            string path = System.IO.Path.Combine(AppContext.BaseDirectory, "installer", script); if (!File.Exists(path)) throw new FileNotFoundException("Microphone setup is missing from this package.", path);
-            var start = new ProcessStartInfo("powershell.exe") { UseShellExecute = true, Verb = "runas", WindowStyle = ProcessWindowStyle.Hidden };
-            foreach (var arg in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path, "-EndpointId", device.Id }) start.ArgumentList.Add(arg);
-            if (install) { start.ArgumentList.Add("-DllPath"); start.ArgumentList.Add(System.IO.Path.Combine(AppContext.BaseDirectory, "SoundboardLab.Audio.dll")); start.ArgumentList.Add("-EffectSlot"); start.ArgumentList.Add((string)slot.SelectedItem); }
-            using var process = Process.Start(start) ?? throw new InvalidOperationException("Microphone setup did not start."); await process.WaitForExitAsync(); if (process.ExitCode != 0) throw new InvalidOperationException("Microphone setup failed. Check endpoint permissions and export diagnostics. Existing endpoint properties are restored if setup fails.");
+            await DeviceSetupClient.RunAsync(new(install?"install":"restore",[device.Id],install,install?(string)slot.SelectedItem:null));
             settings.CaptureDeviceId = device.Id; status.Text = "Setup completed. Windows Audio may need a restart to reload the effects. Then reopen recording apps and test the microphone.";
         }
-        Dialogs.Button(buttons, "Enable mixing", async (_, _) => { try { await Run("Install-Microphone.ps1", true); } catch (Exception ex) { Dialogs.Error(this, ex); } });
-        Dialogs.Button(buttons, "Restore original settings", async (_, _) => { try { await Run("Restore-Microphone.ps1", false); } catch (Exception ex) { Dialogs.Error(this, ex); } });
+        Dialogs.Button(buttons, "Enable mixing", async (_, _) => { try { await Run(true); } catch (Exception ex) { Dialogs.Error(this, ex); } });
+        Dialogs.Button(buttons, "Restore original settings", async (_, _) => { try { await Run(false); } catch (Exception ex) { Dialogs.Error(this, ex); } });
         Dialogs.Button(panel, "Restart Windows Audio…", async (_, _) => {
             if (MessageBox.Show(this, "This briefly interrupts playback and recording in all applications. Some apps may need reopening. Restart Windows Audio now?", "Restart Windows Audio", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
             try {
-                var start = new ProcessStartInfo("powershell.exe") { UseShellExecute = true, Verb = "runas", WindowStyle = ProcessWindowStyle.Hidden };
-                foreach (var arg in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", System.IO.Path.Combine(AppContext.BaseDirectory, "installer", "Restart-Audio.ps1") }) start.ArgumentList.Add(arg);
-                using var process = Process.Start(start) ?? throw new InvalidOperationException("Audio restart did not start.");
-                await process.WaitForExitAsync();
-                if (process.ExitCode != 0) throw new InvalidOperationException("Windows Audio could not restart. Export diagnostics or restart it from Windows Services.");
+                await DeviceSetupClient.RunAsync(new("restart",[]));
                 status.Text = "Windows Audio restarted. Reopen your voice apps, then test the microphone.";
             } catch (Exception ex) { Dialogs.Error(this, ex); }
         });

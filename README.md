@@ -51,7 +51,7 @@ The speaker slider changes this app's playback gain without changing Windows mas
 
 ### Microphone mixing
 
-Open **Preferences → Devices**, check the microphone used by your voice app, and click **Repair**. Windows requests administrator access to install the component. Setup backs up the previous endpoint effects for restoration.
+Open **Preferences → Devices**, check the microphone used by your voice app, and click **Repair**. Windows requests administrator access to install the component. The compiled setup helper uses Windows APIs directly and backs up the previous endpoint effects for restoration; the app does not launch PowerShell for device configuration.
 
 Reopen apps using that microphone after setup. If Windows keeps the old audio graph, choose **Restart Win-Audio** from the device's context menu when convenient; this interrupts Windows playback and recording.
 
