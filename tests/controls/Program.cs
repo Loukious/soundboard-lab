@@ -195,6 +195,8 @@ internal static class Program
         var settings=Field<PreferenceStore>(window,"preferenceStore").Settings;var speaker=Field<Slider>(window,"SpeakerSlider");var clip=Field<Slider>(window,"ClipSlider");
         speaker.Value=.37;clip.Value=1.5;
         Check(speaker.ToolTip is ToolTip {Content:"37%",IsOpen:false}&&clip.ToolTip is ToolTip {Content:"150%",IsOpen:false},"speaker and microphone sliders maintain percentage feedback without opening test popups");
+        var volumeTip=(ToolTip)speaker.ToolTip;
+        Check(volumeTip.Placement==PlacementMode.RelativePoint&&ReferenceEquals(volumeTip.PlacementTarget,speaker)&&volumeTip.Background is SolidColorBrush {Color:{R:51,G:51,B:51}}&&volumeTip.Template is not null,"volume feedback uses a grey template positioned relative to the pointer, rather than the thumb");
         settings.LinearVolumeSlider=false;speaker.Value=.5;Check(((ToolTip)speaker.ToolTip).Content as string=="25%","nonlinear slider feedback displays the applied gain");settings.LinearVolumeSlider=true;speaker.Value=0;clip.Value=1;
         bool initialized=Field<bool>(window,"initialized");typeof(MainWindow).GetField("initialized",Private)!.SetValue(window,false);
         try{
