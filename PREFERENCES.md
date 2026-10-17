@@ -2,6 +2,8 @@
 
 The seven pages contain working settings. Disabled buttons indicate a missing selection or dependency, such as bitrate being editable only for MP3. Audio forwarding adds foreground-app/whole-PC sources, independent volume and optional voice muting, plus manual toggle/hold/stop controls. Two additional Special Hotkeys provide toggle and push-to-forward; they do not replace the 44 original actions. Forwarding starts off at each launch, and configuration changes use Apply while the forwarding controls take effect immediately.
 
+Sound shortcuts default to a persistent sound ID and keep playing that sound after changing categories or sorting. **Same hotkeys in all categories** is an opt-in row mode: shortcuts follow the visible row in the selected category. Its tooltip explains the distinction. Existing preferences retain their chosen mode; switching off row mode exposes the per-sound assignments.
+
 | Page | Implemented behavior |
 |---|---|
 | Audio | Inline voice measurement using a separate WASAPI capture session and an in-memory meter, with Stop and a muted-input hint; dynamic normalization per channel; fixed gain and cancellable library loudness analysis with inline volume/status/file-count results; voice blocking; microphone-only activation audio; push-to-talk and positive/negative karaoke delays; Windows communications ducking. The reference's 89 dB corresponds to -23 LU. |

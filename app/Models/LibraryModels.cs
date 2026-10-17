@@ -141,7 +141,7 @@ public sealed class AppPreferences
     public string OtherApplicationsVolume { get; set; } = "Reduce the volume of other sounds by 80%";
     public double FixedAdjustmentDb { get; set; }
     public bool AllowLeftRightModifiers { get; set; } = true;
-    public bool SameHotkeysInAllCategories { get; set; } = true;
+    public bool SameHotkeysInAllCategories { get; set; }
     public string NumcodeModifier { get; set; } = "Alt";
     public string IndexModifier { get; set; } = "Ctrl+Alt";
     public bool NumcodeCategoryIndex { get; set; }

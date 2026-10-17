@@ -69,6 +69,7 @@ internal static class Program
             var grid=Field<DataGrid>(window,"SoundGrid");var volume=Field<Slider>(window,"SpeakerSlider");var engine=Field<AudioService>(window,"audio");
             await CheckMissingSoundsAndColors(window,library,sound,temp);
             await CheckSearchAndCategoryLayout(window,library,sound,temp);
+            await CheckStableSoundHotkeys(window,library,sound,temp,!layoutOnly);
             await CheckPreferenceResponsiveness(window);
             if(preferenceDevices){int callerThread=Environment.CurrentManagedThreadId,workerThread=0;var clock=System.Diagnostics.Stopwatch.StartNew();var discovered=await Task.Run(()=>{workerThread=Environment.CurrentManagedThreadId;return PreferenceDeviceSnapshot.Read(CancellationToken.None);});Check(workerThread!=callerThread&&discovered.Devices.All(x=>!string.IsNullOrWhiteSpace(x.Id)),"the actual read-only Windows device snapshot completes on its own background thread");Console.WriteLine($"Background device discovery: {clock.Elapsed.TotalMilliseconds:F1} ms for {discovered.Devices.Length} endpoints. No audio stream or volume change.");}
             if(layoutOnly){CheckHotkeyEditor(window,library,sound);CheckMenusAndSpecialHotkeys(window);await CheckPreferencePages(window,temp);Console.WriteLine($"PASS {checks} headless WPF layout checks. No capture, rendering, window activation or OS input.");return;}
@@ -307,6 +308,52 @@ internal static class Program
         var tool=(Window)Invoke(window,"CreateSoundColorTool")!;
         try{var panel=(FrameworkElement)tool.Content;panel.Measure(new Size(354,300));panel.Arrange(new Rect(0,0,354,300));panel.UpdateLayout();Check(Descendants<Button>(panel).Count(x=>AutomationProperties.GetAutomationId(x).StartsWith("SoundColorSlot"))==24,"Color tool renders all 24 configurable palette slots without opening a window");}finally{tool.Close();}
         grid.SelectedItem=existing;Field<TextBlock>(window,"StatusText").Visibility=Visibility.Collapsed;
+    }
+    private static async Task CheckStableSoundHotkeys(MainWindow window,LibraryStore library,SoundEntry sound,string temp,bool playback)
+    {
+        var settings=Field<PreferenceStore>(window,"preferenceStore").Settings;
+        Check(!new AppPreferences().SameHotkeysInAllCategories&&!settings.SameHotkeysInAllCategories,"new preferences use per-sound shortcuts instead of category-dependent row shortcuts");
+        string originalCategory=sound.Category,originalTitle=sound.Title,originalKey=sound.Hotkey;
+        var grid=Field<DataGrid>(window,"SoundGrid");var hooks=Field<GlobalHotkeyService>(window,"hotkeys");
+        string alternateFile=Path.Combine(temp,"sound-hotkey-alternate.wav");File.Copy(sound.FilePath,alternateFile);
+        var alternate=library.AddFiles([alternateFile],"Hotkey alternate").Single();alternate.Title="A different sound";
+        library.AddCategory("Hotkey original");sound.Category="Hotkey original";sound.Title="Z stable sound";
+        string Binding()=>((List<HotkeyBinding>)Invoke(window,"BuildHotkeyBindings")!).Single(x=>x.Gesture=="Ctrl+F23").Action;
+        void Category(string name)=>Invoke(window,"CategoryTree_Changed",Field<TreeView>(window,"CategoryTree"),new RoutedPropertyChangedEventArgs<object>(null,new TreeViewItem {Tag=name}));
+        try{
+            await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);Category("Hotkey original");
+            string target=(string)Invoke(window,"SoundHotkeyTarget",sound)!;
+            Check(target=="sound:"+sound.Id,"the actual sound hotkey editor targets the persistent sound ID");
+            Invoke(window,"AssignHotkey",target,"Ctrl+F23");
+            Check(sound.Hotkey=="Ctrl+F23"&&settings.RowHotkeys.Count==0&&Binding()=="play:"+sound.Id,"assigning a sound shortcut stores it on the sound and registers its ID rather than a row");
+            Category("Hotkey alternate");
+            Check(grid.Items.Count==1&&ReferenceEquals(grid.Items[0],alternate)&&Binding()=="play:"+sound.Id&&window.ShownHotkey(alternate)=="","changing category cannot transfer a sound shortcut to another sound at the same row");
+            if(playback){
+                int originalCount=sound.PlayCount,alternateCount=alternate.PlayCount;
+                await (Task)Invoke(window,"HandleActionAsync",Binding(),true)!;
+                Check(Field<AudioService>(window,"audio").IsPlaying&&Field<SoundEntry>(window,"playingEntry").Id==sound.Id&&sound.PlayCount==originalCount+1&&alternate.PlayCount==alternateCount,"the resolved hotkey plays its original sound while a different category is visible, with muted output");
+                await (Task)Invoke(window,"StopAsync")!;
+            }
+            Category("*");Invoke(window,"ApplySoundSort",grid.Columns.First(x=>x.SortMemberPath==nameof(SoundEntry.Title)),System.ComponentModel.ListSortDirection.Ascending);
+            Check(ReferenceEquals(grid.Items[0],alternate)&&Binding()=="play:"+sound.Id&&window.ShownHotkey(sound)=="Ctrl+F23","sorting the sound list keeps the shortcut and its displayed value attached to the same sound");
+            library.Document.Entries.Move(library.Document.Entries.IndexOf(sound),library.Document.Entries.Count-1);sound.Category="Hotkey alternate";
+            await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+            Check(Binding()=="play:"+sound.Id,"moving a sound to another category or library position preserves the binding target");
+            string state=(string)typeof(MainWindow).GetProperty("StateDirectory",Private)!.GetValue(window)!;
+            using(var recovered=new LibraryStore(state))Check(recovered.Document.Entries.Single(x=>x.Id==sound.Id).Hotkey=="Ctrl+F23","per-sound shortcuts and their sound IDs survive library recovery");
+            grid.SelectedItem=sound;
+            grid.ContextMenu!.Items.OfType<MenuItem>().Single(x=>x.Header as string=="Remove hotkey").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Check(sound.Hotkey==""&&!((List<HotkeyBinding>)Invoke(window,"BuildHotkeyBindings")!).Any(x=>x.Gesture=="Ctrl+F23"),"Remove hotkey clears the specific sound assignment after category and order changes");
+            settings.SameHotkeysInAllCategories=true;Invoke(window,"AssignHotkey",(string)Invoke(window,"SoundHotkeyTarget",alternate)!,"Ctrl+F23");
+            Check(Binding().StartsWith("row:")&&alternate.Hotkey=="","explicitly enabling shared-row mode still permits category-dependent row shortcuts");
+            Check(!hooks.IsStarted&&!window.IsVisible&&!window.IsActive,"sound hotkey regression checks never install hooks, show windows or submit desktop input");
+        }finally{
+            if(playback)await (Task)Invoke(window,"StopAsync")!;
+            settings.SameHotkeysInAllCategories=false;settings.RowHotkeys.Clear();sound.Hotkey=originalKey;sound.Category=originalCategory;sound.Title=originalTitle;
+            Invoke(window,"ClearSoundSorting");library.Document.Entries.Move(library.Document.Entries.IndexOf(sound),0);library.Document.Entries.Remove(alternate);
+            library.RemoveCategory("Hotkey original");library.RemoveCategory("Hotkey alternate");Category("*");grid.SelectedItem=sound;
+            await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+        }
     }
     private static void CheckHotkeyEditor(MainWindow window,LibraryStore library,SoundEntry sound)
     {

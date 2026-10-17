@@ -133,7 +133,9 @@ internal sealed partial class SettingsWindow : Window
         buttons=new(){Orientation=Orientation.Horizontal};group.Children.Add(buttons);
         buttons.Children.Add(Button("Add",(_,_)=>EditAutoKey(false)));var editRule=Button("Edit",(_,_)=>EditAutoKey(true));var removeRule=Button("Remove",(_,_)=>{if(autoKeysList.SelectedItem is AutoKeyEntry rule)draft.AutoKeys.Remove(rule);RefreshAutoKeys();Dirty();});editRule.IsEnabled=removeRule.IsEnabled=false;buttons.Children.Add(editRule);buttons.Children.Add(removeRule);autoKeysList.SelectionChanged+=(_,_)=>editRule.IsEnabled=removeRule.IsEnabled=autoKeysList.SelectedItem is AutoKeyEntry;
 
-        group=Group(page,"Advanced options");Check(group,"Pass hotkeys",nameof(AppPreferences.PassHotkeys));Check(group,"Auto stop (recommended)",nameof(AppPreferences.StopOnNewSound));Check(group,"Allow left and right modifiers",nameof(AppPreferences.AllowLeftRightModifiers));Check(group,"Same hotkeys in all categories",nameof(AppPreferences.SameHotkeysInAllCategories));
+        group=Group(page,"Advanced options");Check(group,"Pass hotkeys",nameof(AppPreferences.PassHotkeys));Check(group,"Auto stop (recommended)",nameof(AppPreferences.StopOnNewSound));Check(group,"Allow left and right modifiers",nameof(AppPreferences.AllowLeftRightModifiers));
+        var rowHotkeys=Check(group,"Same hotkeys in all categories",nameof(AppPreferences.SameHotkeysInAllCategories));
+        rowHotkeys.ToolTip="Assign shortcuts to row positions in the selected category instead of individual sounds. Leave this unchecked to keep each shortcut attached to its sound when changing categories or sorting.";
     }
     private string ActionValue(SpecialHotkeyAction action)=>action.DefaultValue.HasValue?draft.ActionValues.GetValueOrDefault(action.Key,action.DefaultValue.Value).ToString("0.##")+action.Unit:"";
     private void RefreshAutoKeys(){autoKeysList.ItemsSource=null;autoKeysList.ItemsSource=draft.AutoKeys;}
