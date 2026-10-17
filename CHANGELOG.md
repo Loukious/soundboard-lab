@@ -6,6 +6,10 @@ use `v` followed by the app version; prereleases use a suffix such as `-rc.1`.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-17
+
+### Fixed
+
 - Keep recording-device status accurate after translation and selection changes; allow stalled discovery to time out and retry.
 - Use a compiled Windows API helper for microphone selection, setup, repair, restoration, and explicit audio-service restarts instead of launching PowerShell from the app.
 - Preserve existing endpoint backups and roll back all affected devices if a configuration change fails.

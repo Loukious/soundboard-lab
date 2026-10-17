@@ -29,12 +29,12 @@ A Windows soundboard with global hotkeys, categories, a waveform editor, and aud
 
 ## Download
 
-Download **SoundboardLab-0.1.1-windows-x64.zip** from the [latest numbered release](https://github.com/Loukious/soundboard-lab/releases/latest), extract the entire archive, and run **SoundboardLab.exe**. The .NET runtime is included; keep its accompanying DLLs and installer scripts together. Builds from `main` are also available in the [development preview](https://github.com/Loukious/soundboard-lab/releases/tag/preview).
+Download **SoundboardLab-0.1.2-windows-x64.zip** from the [latest numbered release](https://github.com/Loukious/soundboard-lab/releases/latest), extract the entire archive, and run **SoundboardLab.exe**. The .NET runtime is included; keep its accompanying DLLs and installer scripts together. Builds from `main` are also available in the [development preview](https://github.com/Loukious/soundboard-lab/releases/tag/preview).
 
 The release includes `SHA256SUMS.txt`. Check your download with:
 
 ```powershell
-Get-FileHash .\SoundboardLab-0.1.1-windows-x64.zip -Algorithm SHA256
+Get-FileHash .\SoundboardLab-0.1.2-windows-x64.zip -Algorithm SHA256
 ```
 
 Requires Windows x64 with working Windows audio services/codecs. Audio forwarding requires **Windows build 20348 or later**, including Windows 11. Speech generation needs an installed SAPI voice. Public builds use English UI strings and synthesize notification cues and activation noise on first launch.
