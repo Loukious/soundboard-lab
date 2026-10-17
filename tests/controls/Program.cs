@@ -67,6 +67,7 @@ internal static class Program
             var library=Field<LibraryStore>(window,"library");var sound=library.AddFiles([path]).Single();sound.DurationSeconds=4;
             await Task.Delay(30);Layout();
             var grid=Field<DataGrid>(window,"SoundGrid");var volume=Field<Slider>(window,"SpeakerSlider");var engine=Field<AudioService>(window,"audio");
+            CheckColumnResizeGestures(window,sound);
             await CheckMissingSoundsAndColors(window,library,sound,temp);
             await CheckSearchAndCategoryLayout(window,library,sound,temp);
             await CheckStableSoundHotkeys(window,library,sound,temp,!layoutOnly);
@@ -173,6 +174,45 @@ internal static class Program
             Directory.Delete(temp,true);
         }
         Console.WriteLine($"PASS {checks} headless WPF control checks. No window shown, no mouse or keyboard input sent; playback remained muted.");
+    }
+    private static void CheckColumnResizeGestures(MainWindow window,SoundEntry sound)
+    {
+        var grid=Field<DataGrid>(window,"SoundGrid");var root=(FrameworkElement)window.Content;
+        void Layout(){root.Measure(new Size(1020,660));root.Arrange(new Rect(0,0,1020,660));root.UpdateLayout();}
+        Layout();grid.SelectedItem=sound;
+        var headers=Descendants<DataGridColumnHeader>(grid).Where(x=>x.Column is not null).OrderBy(x=>x.DisplayIndex).ToArray();
+        var first=headers[0];var next=headers[1];var originalWidth=first.Column.Width;int[] order=grid.Columns.Select(x=>x.DisplayIndex).ToArray();
+        var cell=Descendants<DataGridCell>(grid).First(x=>ReferenceEquals(x.DataContext,sound)&&x.Column.SortMemberPath!="@Hotkey");
+        void Press(UIElement source){var e=new MouseButtonEventArgs(Mouse.PrimaryDevice,Environment.TickCount,MouseButton.Left){RoutedEvent=Mouse.PreviewMouseDownEvent};typeof(MouseButtonEventArgs).GetProperty(nameof(MouseButtonEventArgs.ClickCount))!.SetValue(e,1);source.RaiseEvent(e);}
+        SoundEntry? Move()=> (SoundEntry?)Invoke(window,"TakeSoundDrag",new Point(200,100),MouseButtonState.Pressed);
+        try{
+            // Reproduce a stale row-drag candidate followed by a real header
+            // press. This must clear the candidate before a resize/reorder moves.
+            Press(cell);Check(Field<Guid?>(window,"soundDragId")==sound.Id,"pressing a sound row prepares a drag of that particular sound");
+            var right=(Thumb)first.Template.FindName("PART_RightHeaderGripper",first);Press(right);
+            Check(Field<Guid?>(window,"soundDragId") is null&&Move() is null,"pressing the real column resize thumb clears row dragging even with a selected sound");
+            double before=first.Column.ActualWidth;
+            right.RaiseEvent(new DragStartedEventArgs(0,0){RoutedEvent=Thumb.DragStartedEvent});
+            right.RaiseEvent(new DragDeltaEventArgs(25,0){RoutedEvent=Thumb.DragDeltaEvent});Layout();
+            double during=first.Column.ActualWidth;
+            Check(during>before+10&&Move() is null,"a column keeps resizing after the pointer crosses the sound drag threshold");
+            right.RaiseEvent(new DragCompletedEventArgs(25,0,false){RoutedEvent=Thumb.DragCompletedEvent});Layout();
+            Check(Math.Abs(first.Column.ActualWidth-during)<1&&grid.Columns.Select(x=>x.DisplayIndex).SequenceEqual(order),"releasing the resize thumb preserves the new width and leaves column order unchanged");
+            var left=(Thumb)next.Template.FindName("PART_LeftHeaderGripper",next);before=first.Column.ActualWidth;Press(left);
+            left.RaiseEvent(new DragStartedEventArgs(0,0){RoutedEvent=Thumb.DragStartedEvent});left.RaiseEvent(new DragDeltaEventArgs(15,0){RoutedEvent=Thumb.DragDeltaEvent});left.RaiseEvent(new DragCompletedEventArgs(15,0,false){RoutedEvent=Thumb.DragCompletedEvent});Layout();
+            Check(first.Column.ActualWidth>before+5&&Move() is null,"the left resize handle also resizes its preceding column without starting a sound drag");
+            Press(cell);Press(first);
+            Check(Move() is null&&grid.CanUserReorderColumns,"header-center dragging remains available to WPF for column reordering rather than sound dragging");
+            var scrollbar=Descendants<ScrollBar>(grid).First();Press(cell);Press(scrollbar);
+            Check(Move() is null,"a sound-list scrollbar gesture clears row dragging instead of starting a file drag");
+            var hotkey=Descendants<DataGridCell>(grid).First(x=>ReferenceEquals(x.DataContext,sound)&&x.Column.SortMemberPath=="@Hotkey");Press(hotkey);
+            Check(Move() is null,"a hotkey-cell press stays available to the editor and never starts a sound drag");
+            Press(cell);Invoke(window,"TakeSoundDrag",new Point(),MouseButtonState.Released);
+            Check(Move() is null,"releasing the mouse cancels a pending sound-row drag");
+            Invoke(window,"PrepareSoundDrag",cell,new Point(),1);var dragged=Move();
+            Check(ReferenceEquals(dragged,sound)&&Move() is null,"an intentional row drag still resolves its pressed sound and is consumed only once");
+            Check(!window.IsVisible&&!window.IsActive,"resize regression checks use routed events without showing windows, capturing the mouse or sending desktop input");
+        }finally{first.Column.Width=originalWidth;Invoke(window,"TakeSoundDrag",new Point(),MouseButtonState.Released);Layout();}
     }
     private static async Task CheckSearchAndCategoryLayout(MainWindow window,LibraryStore library,SoundEntry existing,string temp)
     {
@@ -328,7 +368,7 @@ internal static class Program
         var alternate=library.AddFiles([alternateFile],"Hotkey alternate").Single();alternate.Title="A different sound";
         library.AddCategory("Hotkey original");sound.Category="Hotkey original";sound.Title="Z stable sound";
         string Binding()=>((List<HotkeyBinding>)Invoke(window,"BuildHotkeyBindings")!).Single(x=>x.Gesture=="Ctrl+F23").Action;
-        void Category(string name)=>Invoke(window,"CategoryTree_Changed",Field<TreeView>(window,"CategoryTree"),new RoutedPropertyChangedEventArgs<object>(null,new TreeViewItem {Tag=name}));
+        void Category(string name)=>Invoke(window,"CategoryTree_Changed",Field<TreeView>(window,"CategoryTree"),new RoutedPropertyChangedEventArgs<object>(window,new TreeViewItem {Tag=name}));
         try{
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);Category("Hotkey original");
             string target=(string)Invoke(window,"SoundHotkeyTarget",sound)!;

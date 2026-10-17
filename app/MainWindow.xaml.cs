@@ -78,9 +78,9 @@ public partial class MainWindow : Window
         Icon=System.Windows.Media.Imaging.BitmapFrame.Create(new Uri("pack://application:,,,/SoundboardLab;component/assets/app-icon.ico"));
         ConfigureColumnMenu();
         ConfigureMenus();
-        Point dragOrigin = default;
-        SoundGrid.PreviewMouseLeftButtonDown += (_, e) => dragOrigin = e.GetPosition(SoundGrid);
-        SoundGrid.PreviewMouseMove += (_, e) => { if (e.LeftButton == MouseButtonState.Pressed && (e.GetPosition(SoundGrid) - dragOrigin).Length > 10 && Selected is { } selected) DragDrop.DoDragDrop(SoundGrid, new DataObject("SoundEntryId", selected.Id), DragDropEffects.Move); };
+        SoundGrid.PreviewMouseLeftButtonDown += (_,e)=>PrepareSoundDrag(e.OriginalSource as DependencyObject,e.GetPosition(SoundGrid),e.ClickCount);
+        SoundGrid.PreviewMouseLeftButtonUp += (_,_)=>soundDragId=null;
+        SoundGrid.PreviewMouseMove += (_,e)=>{if(TakeSoundDrag(e.GetPosition(SoundGrid),e.LeftButton) is {} sound)DragDrop.DoDragDrop(SoundGrid,new DataObject("SoundEntryId",sound.Id),DragDropEffects.Move);};
         SoundGrid.AllowDrop = true;
         SoundGrid.Drop += (_, e) => { if (e.Data.GetData("SoundEntryId") is Guid id && ItemsControl.ContainerFromElement(SoundGrid, e.OriginalSource as DependencyObject) is DataGridRow row && row.Item is SoundEntry target) { var entry = library.Document.Entries.FirstOrDefault(x => x.Id == id); if (entry is not null) { ClearSoundSorting(); library.Document.Entries.Move(library.Document.Entries.IndexOf(entry), library.Document.Entries.IndexOf(target)); e.Handled = true; } } };
         Point categoryOrigin=default;

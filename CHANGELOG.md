@@ -10,6 +10,7 @@ use `v` followed by the app version; prereleases use a suffix such as `-rc.1`.
 
 ### Fixed
 
+- Prevent sound drag-and-drop from interrupting column resizing and header reordering.
 - Number sound-list rows from 1 within the visible category, including after sorting; numeric search follows those displayed row numbers.
 - Default new configurations to persistent per-sound hotkeys; keep category-dependent row shortcuts as an explicit option with explanatory help.
 - Refresh the README screenshots with Windows-painted title bars, app icons, window controls and borders.
