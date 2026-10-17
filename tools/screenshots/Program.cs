@@ -29,9 +29,18 @@ internal static class Program
     {
         var content=(FrameworkElement)window.Content;content.Measure(new Size(width,height));content.Arrange(new Rect(0,0,width,height));content.UpdateLayout();
         await Dispatcher.Yield(DispatcherPriority.ContextIdle);content.Measure(new Size(width,height));content.Arrange(new Rect(0,0,width,height));content.UpdateLayout();
-        var drawing=new DrawingVisual();using(var paint=drawing.RenderOpen()){paint.DrawRectangle(window.Background,null,new Rect(0,0,width,height));}
-        var bitmap=new RenderTargetBitmap((int)width,(int)height,96,96,PixelFormats.Pbgra32);bitmap.Render(drawing);bitmap.Render(content);
+        var background=new DrawingVisual();using(var paint=background.RenderOpen()){paint.DrawRectangle(window.Background,null,new Rect(0,0,width,height));}
+        var client=new RenderTargetBitmap((int)width,(int)height,96,96,PixelFormats.Pbgra32);client.Render(background);client.Render(content);
+        var frame=NativeWindowFrame.Capture(window,width,height);
+        var drawing=new DrawingVisual();using(var paint=drawing.RenderOpen()){
+            paint.DrawImage(frame.Image,new Rect(0,0,frame.Image.Width,frame.Image.Height));
+            // Keep the content pixels aligned at 96 DPI instead of resampling
+            // them for fractional system-frame measurements at desktop DPI.
+            paint.DrawImage(client,new Rect(Math.Round(frame.Client.X),Math.Round(frame.Client.Y),width,height));
+        }
+        var bitmap=new RenderTargetBitmap((int)Math.Ceiling(frame.Image.Width),(int)Math.Ceiling(frame.Image.Height),96,96,PixelFormats.Pbgra32);bitmap.Render(drawing);
         var png=new PngBitmapEncoder();png.Frames.Add(BitmapFrame.Create(bitmap));using var output=File.Create(path);png.Save(output);Console.WriteLine("Captured "+path);
+        if(window.IsVisible||window.IsActive)throw new Exception("Screenshot rendering unexpectedly showed or activated a window.");
     }
     private static async Task Capture(string output)
     {
@@ -52,7 +61,7 @@ internal static class Program
                 if(i<6)library.Document.HotbarPins.Add(new(){SoundId=sound.Id,Page=0,Slot=i,Color=colors[i%4]});
             }
             foreach(var category in library.Document.Categories){category.IconColor=colors[Array.IndexOf(new[]{"Voice","Games","Reactions","Music"},category.Name)%4];}
-            Invoke(main,"RefreshLibrary");await Dispatcher.Yield(DispatcherPriority.Background);Field<DataGrid>(main,"SoundGrid").SelectedIndex=0;
+            library.Save(Path.Combine(state,"Demo library.json"));Invoke(main,"RefreshLibrary");await Dispatcher.Yield(DispatcherPriority.Background);Field<DataGrid>(main,"SoundGrid").SelectedIndex=0;
             await Save(main,Path.Combine(output,"main-window.png"),1020,660);
             Field<FrameworkElement>(main,"SearchPanel").Visibility=Visibility.Visible;
             await Save(main,Path.Combine(output,"search-panel.png"),1020,660);
@@ -82,7 +91,7 @@ internal static class Program
             }
             var editorType=typeof(MainWindow).Assembly.GetType("SoundboardLab.EditorWindow")!;
             var editor=(Window)Activator.CreateInstance(editorType,[library.Document.Entries[0].FilePath,new Func<string,Task>(_=>Task.CompletedTask),prefs.Settings])!;
-            try{await (Task)Invoke(editor,"LoadAsync")!;await Save(editor,Path.Combine(output,"sound-editor.png"),680,410);}finally{editor.Close();}
+            try{await (Task)Invoke(editor,"LoadAsync")!;editor.Title=@"Sound Editor - C:\Soundboard Lab\Sounds\Welcome back.wav";await Save(editor,Path.Combine(output,"sound-editor.png"),680,410);}finally{editor.Close();}
             if(main.IsVisible||main.IsActive)throw new Exception("Screenshot rendering unexpectedly showed a window.");
         }finally{if(main is not null){main.Close();await Dispatcher.Yield(DispatcherPriority.Background);}Directory.Delete(state,true);}
     }

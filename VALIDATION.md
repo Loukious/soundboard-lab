@@ -43,4 +43,4 @@ These are excluded from public CI. Device repair, live mode switching, voice cal
 
 ## Screenshots
 
-`tools/screenshots` renders actual controls with generated audio and a private temporary library. It does not show windows, take focus, send input, or play audio. Screenshots are retained in `docs/screenshots/` and embedded in the README.
+`tools/screenshots` renders actual controls with generated audio and a private temporary library. A separate hidden native window uses the app window's title, icon and resize style to paint its caption buttons and frame through Windows nonclient painting, then combines that with the WPF content. This keeps frame capture from changing the controls' layout. It does not show windows, take focus, send input, or play audio. Screenshots are retained in `docs/screenshots/` and embedded in the README.

@@ -91,7 +91,7 @@ Forwarding starts **off** at every launch, saves no recording, and does not chan
 
 </details>
 
-Screenshots show the actual WPF controls with an isolated demo library of generated audio. Recreate them with `dotnet run --project tools/screenshots -- docs/screenshots`; the renderer does not show windows or send desktop input.
+Screenshots show the actual WPF controls with Windows-painted title bars and frames, using an isolated demo library of generated audio. Recreate them with `dotnet run --project tools/screenshots -- docs/screenshots`; the renderer does not show windows or send desktop input.
 
 ## Build from source
 
