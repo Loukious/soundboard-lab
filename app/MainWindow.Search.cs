@@ -12,7 +12,7 @@ public partial class MainWindow
     {
         string query=SearchBox.Text.Trim();if(query.Length==0)return [];
         var entries=view?.Cast<SoundEntry>()??[];
-        if(int.TryParse(query,out int index)&&index>0)return entries.Where(x=>SoundIndex(x)==index).ToArray();
+        if(int.TryParse(query,out int index)&&index>0)return entries.Skip(index-1).Take(1).ToArray();
         if(query.Length<2)return [];
         return entries.Where(x=>(x.Title+" "+x.Artist+" "+x.MetadataTitle+" "+x.Tags+" "+x.FilePath).Contains(query,StringComparison.CurrentCultureIgnoreCase)).ToArray();
     }

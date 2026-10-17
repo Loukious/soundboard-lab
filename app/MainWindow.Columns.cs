@@ -14,7 +14,7 @@ public partial class MainWindow
 {
     private string categorySortKey="";
     private ListSortDirection categorySortDirection;
-    internal int SoundIndex(SoundEntry sound)=>library.Document.Entries.IndexOf(sound)+1;
+    internal int SoundIndex(SoundEntry sound)=>view is CollectionView list?list.IndexOf(sound)+1:0;
     private void AlignCategoryCountHeader()
     {
         if(CategoryTree.Items.OfType<TreeViewItem>().FirstOrDefault()?.Header is not Grid row||row.ActualWidth<=0)return;

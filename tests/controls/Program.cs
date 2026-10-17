@@ -197,8 +197,17 @@ internal static class Program
         library.AddCategory("Search Amber");library.AddCategory("Search Blue");added[0].Category=added[1].Category="Search Amber";added[2].Category="Search Blue";await Layout();search.Text="Amber";
         Invoke(window,"CategoryTree_Changed",Field<TreeView>(window,"CategoryTree"),new RoutedPropertyChangedEventArgs<object>(existing,new TreeViewItem {Tag="Search Blue"}));
         Check(grid.Items.Count==1&&!Field<Button>(window,"SearchNextButton").IsEnabled,"switching categories refreshes navigation for an existing search query");
+        await Layout();
+        string RowNumber(SoundEntry entry){var row=Descendants<DataGridRow>(grid).Single(x=>ReferenceEquals(x.Item,entry));var cell=Descendants<DataGridCell>(row).Single(x=>x.Column.SortMemberPath=="@Index");return Descendants<TextBlock>(cell).Single().Text;}
+        Check(RowNumber(added[2])=="1"&&window.SoundIndex(added[2])==1,$"the first sound in a category displays row 1 instead of its position in the entire library (cell={RowNumber(added[2])}, view index={window.SoundIndex(added[2])})");
+        search.Text="1";Check(ReferenceEquals(grid.SelectedItem,added[2]),"numeric search finds the displayed category-local row number");search.Text="Amber";
         Invoke(window,"CategoryTree_Changed",Field<TreeView>(window,"CategoryTree"),new RoutedPropertyChangedEventArgs<object>(existing,new TreeViewItem {Tag="Search Amber"}));
         Check(grid.Items.Count==2&&Field<Button>(window,"SearchNextButton").IsEnabled,"search navigation re-enables when the selected category contains matches");
+        await Layout();Check(RowNumber(added[0])=="1"&&RowNumber(added[1])=="2","a different category starts its own consecutive row numbers from 1");
+        Invoke(window,"ApplySoundSort",grid.Columns.First(x=>x.SortMemberPath==nameof(SoundEntry.Title)),System.ComponentModel.ListSortDirection.Ascending);await Layout();
+        Check(ReferenceEquals(grid.Items[0],added[1])&&RowNumber(added[1])=="1"&&RowNumber(added[0])=="2","sorting refreshes row numbers on reused cells while preserving the underlying sound IDs");
+        search.Text="1";Check(ReferenceEquals(grid.SelectedItem,added[1]),"numeric search stays aligned with the visible first row after sorting");
+        Invoke(window,"ClearSoundSorting");search.Text="Amber";
         Invoke(window,"CategoryTree_Changed",Field<TreeView>(window,"CategoryTree"),new RoutedPropertyChangedEventArgs<object>(existing,new TreeViewItem {Tag="*"}));
         Invoke(window,"ResetSearch");Check(search.Text==""&&Field<FrameworkElement>(window,"SearchPanel").Visibility==Visibility.Collapsed&&grid.Items.Count==4,"resetting search closes the panel and retains the complete list");
         library.Remove(added);library.RemoveCategory("Search Amber");library.RemoveCategory("Search Blue");await Layout();

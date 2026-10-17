@@ -6,6 +6,7 @@ use `v` followed by the app version; prereleases use a suffix such as `-rc.1`.
 
 ## [Unreleased]
 
+- Number sound-list rows from 1 within the visible category, including after sorting; numeric search follows those displayed row numbers.
 - Default sound hotkeys to persistent per-sound bindings; keep category-dependent row shortcuts as an explicit option with explanatory help.
 - Refresh the README screenshots with Windows-painted title bars, app icons, window controls and borders.
 - Build once per main push and publish preview and new numbered releases from the same tested artifact; tag pushes no longer trigger duplicate builds.
