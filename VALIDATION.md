@@ -15,6 +15,7 @@
 | Installer plan | Pure fixtures preserving/chaining/restoring vendor effects across mode changes, repair, invalid-backup rejection. Scripts are parsed without running setup. |
 | Compiled device setup | In-memory installation, repair, mode changes, selection changes and restoration, including rollback after partial writes, backup failures and removal failures. Published helper/IPC runs a read-only configuration check without elevation. |
 | GUI helper | Repeated PowerShell helper loading and refusal to run interactive tests without explicit opt-in. |
+| Release workflow | Offline publishing fixtures check shared ZIPs, automatic version tags, annotated tags, existing-release preservation, prereleases, and rejection of corrupt or mismatched build artifacts. |
 
 CI does not install an APO, restart Windows Audio, change volume, send OS input, or show windows. It skips physical audio endpoints and installed speech voices; successful CI does not claim live microphone/voice-app compatibility.
 

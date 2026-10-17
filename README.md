@@ -111,11 +111,12 @@ Original binaries, external translation/notification resources, user libraries, 
 
 ### Automated releases
 
-[Build and release](.github/workflows/build-release.yml) runs on `main` pushes, pull requests, `v*` tags, and manual dispatch:
+[Build and release](.github/workflows/build-release.yml) runs on `main` pushes, pull requests, and manual dispatch. Tag pushes do not start a second run:
 
 - Successful `main` builds update the **preview** prerelease and its downloadable ZIP/checksum.
+- A new app version on `main` creates its numbered tag and release from the same tested ZIP. An existing matching tag pushed with `main` is also accepted. There is one Windows build for both channels.
 - Numbered releases use `vMAJOR.MINOR.PATCH` tags, starting with **v0.1.0**. Before 1.0, minor versions introduce features and patch versions contain fixes. A suffix such as `-rc.1` creates a prerelease.
-- The version in `app/SoundboardLab.csproj` is the source for the app, diagnostics, build metadata, and `SoundboardLab-<version>-windows-x64.zip` filename. Tagged builds fail if the tag does not match it. Each release needs a matching entry in [CHANGELOG.md](CHANGELOG.md), which supplies its release notes.
+- The version in `app/SoundboardLab.csproj` is the source for the app, diagnostics, build metadata, and `SoundboardLab-<version>-windows-x64.zip` filename. Each release needs a matching entry in [CHANGELOG.md](CHANGELOG.md), which supplies its release notes. Existing numbered tags and releases stay unchanged; later commits at the same app version update only the preview.
 - Pull requests build and test without publishing.
 
 The workflow uses GitHub's built-in token; no personal token or repository secret is required. ZIP packaging is a separate CI step, keeping local `build.ps1` behavior unchanged.
