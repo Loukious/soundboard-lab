@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Threading;
 using SoundboardLab.Models;
 
 namespace SoundboardLab;
@@ -14,7 +15,30 @@ public partial class MainWindow
 {
     private string categorySortKey="";
     private ListSortDirection categorySortDirection;
-    internal int SoundIndex(SoundEntry sound)=>view is CollectionView list?list.IndexOf(sound)+1:0;
+    public static readonly DependencyProperty SoundRowNumberProperty=DependencyProperty.RegisterAttached("SoundRowNumber",typeof(int),typeof(MainWindow),new PropertyMetadata(0));
+    public static int GetSoundRowNumber(DependencyObject row)=>(int)row.GetValue(SoundRowNumberProperty);
+    public static void SetSoundRowNumber(DependencyObject row,int number)=>row.SetValue(SoundRowNumberProperty,number);
+    private bool soundRowNumbersQueued;
+    private void SoundGrid_LoadingRow(object sender,DataGridRowEventArgs e)
+    {
+        // AlternationIndex is a cycling stripe counter, not the item's position:
+        // virtualizing backwards can wrap it even in a short sound list.
+        SetSoundRowNumber(e.Row,e.Row.GetIndex()+1);
+        QueueSoundRowNumbers();
+    }
+    private void QueueSoundRowNumbers()
+    {
+        if(soundRowNumbersQueued)return;
+        soundRowNumbersQueued=true;
+        Dispatcher.BeginInvoke(DispatcherPriority.DataBind,()=>{
+            soundRowNumbersQueued=false;
+            // Inserts/removals and view resets can move already-realized rows
+            // without another LoadingRow event. Update only their containers.
+            foreach(var row in Descendants(SoundGrid).OfType<DataGridRow>()){
+                int index=row.GetIndex();if(index>=0)SetSoundRowNumber(row,index+1);
+            }
+        });
+    }
     private void AlignCategoryCountHeader()
     {
         if(CategoryTree.Items.OfType<TreeViewItem>().FirstOrDefault()?.Header is not Grid row||row.ActualWidth<=0)return;

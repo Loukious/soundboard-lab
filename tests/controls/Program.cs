@@ -70,6 +70,7 @@ internal static class Program
             CheckColumnResizeGestures(window,sound);
             await CheckMissingSoundsAndColors(window,library,sound,temp);
             await CheckSearchAndCategoryLayout(window,library,sound,temp);
+            await CheckVirtualizedSoundNumbers(window,library,sound);
             await CheckStableSoundHotkeys(window,library,sound,temp,!layoutOnly);
             await CheckPreferenceResponsiveness(window);
             if(preferenceDevices){int callerThread=Environment.CurrentManagedThreadId,workerThread=0;var clock=System.Diagnostics.Stopwatch.StartNew();var discovered=await Task.Run(()=>{workerThread=Environment.CurrentManagedThreadId;return PreferenceDeviceSnapshot.Read(CancellationToken.None);});Check(workerThread!=callerThread&&discovered.Devices.All(x=>!string.IsNullOrWhiteSpace(x.Id)),"the actual read-only Windows device snapshot completes on its own background thread");Console.WriteLine($"Background device discovery: {clock.Elapsed.TotalMilliseconds:F1} ms for {discovered.Devices.Length} endpoints. No audio stream or volume change.");}
@@ -214,6 +215,48 @@ internal static class Program
             Check(!window.IsVisible&&!window.IsActive,"resize regression checks use routed events without showing windows, capturing the mouse or sending desktop input");
         }finally{first.Column.Width=originalWidth;Invoke(window,"TakeSoundDrag",new Point(),MouseButtonState.Released);Layout();}
     }
+    private static async Task CheckVirtualizedSoundNumbers(MainWindow window,LibraryStore library,SoundEntry existing)
+    {
+        var root=(FrameworkElement)window.Content;var grid=Field<DataGrid>(window,"SoundGrid");
+        var added=Enumerable.Range(2,599).Select(i=>new SoundEntry {Title=$"Numbering {i:D3}",FilePath=existing.FilePath}).ToArray();
+        async Task Layout(){root.Measure(new Size(1020,660));root.Arrange(new Rect(0,0,1020,660));root.UpdateLayout();await Dispatcher.Yield(DispatcherPriority.ContextIdle);root.UpdateLayout();}
+        async Task CheckAt(int index)
+        {
+            var scroll=Descendants<ScrollViewer>(grid).First();scroll.ScrollToVerticalOffset(index);await Layout();await Layout();
+            var rows=Descendants<DataGridRow>(grid).Where(x=>x.Item is SoundEntry&&x.GetIndex()>=0).ToArray();
+            Check(rows.Length>0&&rows.Length<grid.Items.Count,"the large sound list actually recycles rows while scrolling to "+(index+1));
+            foreach(var row in rows){
+                var cell=Descendants<DataGridCell>(row).Single(x=>x.Column.SortMemberPath=="@Index");
+                string actual=Descendants<TextBlock>(cell).Single().Text,expected=(grid.Items.IndexOf(row.Item)+1).ToString();
+                if(actual!=expected)throw new Exception($"Recycled sound number: expected {expected}, got {actual}; alternation={ItemsControl.GetAlternationIndex(row)}, row index={row.GetIndex()}, list size={grid.Items.Count}");
+            }
+            Check(rows.Any(x=>ReferenceEquals(x.Item,grid.Items[index])),"the requested sound is realized and every recycled # cell matches its visible position at "+(index+1));
+        }
+        try{
+            Invoke(library,"Batch",(Action)(()=>{foreach(var entry in added.Take(274))library.Document.Entries.Add(entry);}));await Layout();
+            Check(grid.Items.Count==275,"the regression library has exactly 275 sounds");
+            foreach(int index in new[]{0,127,254,274,200,128,40,0})await CheckAt(index);
+            Invoke(library,"Batch",(Action)(()=>{foreach(var entry in added.Skip(274))library.Document.Entries.Add(entry);}));await Layout();
+            foreach(int index in new[]{599,510,256,128,0})await CheckAt(index);
+            Invoke(window,"ApplySoundSort",grid.Columns.First(x=>x.SortMemberPath==nameof(SoundEntry.Title)),System.ComponentModel.ListSortDirection.Descending);await Layout();
+            foreach(int index in new[]{599,255,0})await CheckAt(index);
+            Invoke(window,"ClearSoundSorting");library.AddCategory("Numbering fixture");
+            Invoke(library,"Batch",(Action)(()=>{foreach(var entry in added.Take(275))entry.Category="Numbering fixture";}));await Layout();
+            Invoke(window,"CategoryTree_Changed",Field<TreeView>(window,"CategoryTree"),new RoutedPropertyChangedEventArgs<object>(existing,new TreeViewItem {Tag="Numbering fixture"}));await Layout();
+            Check(grid.Items.Count==275,"a 275-sound category numbers its filtered view independently of the 600-sound library");
+            foreach(int index in new[]{274,127,0})await CheckAt(index);
+            Field<TextBox>(window,"SearchBox").Text="275";
+            Check(ReferenceEquals(grid.SelectedItem,added[274]),"numeric search finds the same sound as row 275 after category filtering and scrolling");Invoke(window,"ResetSearch");
+            library.Remove(added.Take(5));await Layout();
+            foreach(int index in new[]{269,127,0})await CheckAt(index);
+            library.Document.Entries.Move(library.Document.Entries.IndexOf(added[274]),1);await Layout();
+            await CheckAt(0);Check(ReferenceEquals(grid.Items[0],added[274]),"moving a sound renumbers existing realized rows without changing sound identities");
+        }finally{
+            Invoke(window,"ClearSoundSorting");Invoke(window,"ResetSearch");
+            Invoke(window,"CategoryTree_Changed",Field<TreeView>(window,"CategoryTree"),new RoutedPropertyChangedEventArgs<object>(existing,new TreeViewItem {Tag="*"}));
+            library.Remove(added);library.RemoveCategory("Numbering fixture");grid.ScrollIntoView(existing);await Layout();
+        }
+    }
     private static async Task CheckSearchAndCategoryLayout(MainWindow window,LibraryStore library,SoundEntry existing,string temp)
     {
         var root=(FrameworkElement)window.Content;var grid=Field<DataGrid>(window,"SoundGrid");
@@ -239,7 +282,7 @@ internal static class Program
         Check(grid.Items.Count==1&&!Field<Button>(window,"SearchNextButton").IsEnabled,"switching categories refreshes navigation for an existing search query");
         await Layout();
         string RowNumber(SoundEntry entry){var row=Descendants<DataGridRow>(grid).Single(x=>ReferenceEquals(x.Item,entry));var cell=Descendants<DataGridCell>(row).Single(x=>x.Column.SortMemberPath=="@Index");return Descendants<TextBlock>(cell).Single().Text;}
-        Check(RowNumber(added[2])=="1"&&window.SoundIndex(added[2])==1,$"the first sound in a category displays row 1 instead of its position in the entire library (cell={RowNumber(added[2])}, view index={window.SoundIndex(added[2])})");
+        Check(RowNumber(added[2])=="1","the first sound in a category displays row 1 instead of its position in the entire library");
         search.Text="1";Check(ReferenceEquals(grid.SelectedItem,added[2]),"numeric search finds the displayed category-local row number");search.Text="Amber";
         Invoke(window,"CategoryTree_Changed",Field<TreeView>(window,"CategoryTree"),new RoutedPropertyChangedEventArgs<object>(existing,new TreeViewItem {Tag="Search Amber"}));
         Check(grid.Items.Count==2&&Field<Button>(window,"SearchNextButton").IsEnabled,"search navigation re-enables when the selected category contains matches");

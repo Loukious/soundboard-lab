@@ -71,6 +71,7 @@ public partial class MainWindow : Window
         appliedStartup=Settings.RunOnStartup;
         appliedDucking=Settings.ReduceOtherApplications?Settings.OtherApplicationsVolume:null;
         InitializeComponent();
+        SoundGrid.ItemContainerGenerator.ItemsChanged+=(_,_)=>QueueSoundRowNumbers();
         CategoryTree.LayoutUpdated+=(_,_)=>AlignCategoryCountHeader();
         VolumeSliderFeedback.Attach(SpeakerSlider,value=>Settings.LinearVolumeSlider?value:value*value);
         VolumeSliderFeedback.Attach(ClipSlider,value=>Settings.LinearVolumeSlider?value:value*value/2);

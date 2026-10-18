@@ -18,7 +18,6 @@ public sealed class GuiValueConverter : IValueConverter, IMultiValueConverter
     {
         "Hotkey" => value is SoundEntry sound&&Application.Current.MainWindow is MainWindow main?main.ShownHotkey(sound):"",
         "Filename" => System.IO.Path.GetFileName(value as string)??"",
-        "Index" => value is SoundEntry indexed&&Application.Current.MainWindow is MainWindow owner?owner.SoundIndex(indexed).ToString(culture):value is int index?(index+1).ToString(culture):"",
         "Duration" => value is double seconds && double.IsFinite(seconds) && seconds >= 0 ? $"{(int)(seconds / 60)}:{(int)seconds % 60:D2}" : "",
         _ => value
     };
