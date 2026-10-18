@@ -6,6 +6,8 @@ use `v` followed by the app version; prereleases use a suffix such as `-rc.1`.
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-18
+
 ### Fixed
 
 - Keep sound row numbers consecutive when scrolling and recycling rows, including lists with 275 or more sounds; preserve category-local numbering after sorting, moves and removals.
