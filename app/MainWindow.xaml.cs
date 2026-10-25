@@ -151,6 +151,7 @@ public partial class MainWindow : Window
         if(selectedCategory is not ("*" or "")&&!library.Document.Categories.Any(x=>x.Name==selectedCategory))selectedCategory="*";
         RefreshSoundSorting();view?.Refresh();
         UpdateSearchResults();
+        Title="Soundboard Lab"+(library.HasUnsavedChanges?" *":"");
         LibraryCount.Text = $"{library.Document.Entries.Count} sounds · {library.Document.Entries.Sum(x => x.PlayCount)} plays";
         RecentLibraries.IsEnabled=Settings.RecentLists.Any(File.Exists);RecentLibraries.Items.Clear(); foreach (string path in Settings.RecentLists.Where(File.Exists)) { var item = new MenuItem { Header = Path.GetFileName(path), ToolTip = path }; item.Click += (_, _) => Guard(() => library.Load(path)); RecentLibraries.Items.Add(item); }
         RefreshCategories(); RefreshHotbar(); ConfigureHotkeys(); UpdateCategoryInformation();

@@ -223,8 +223,22 @@ internal static class Program
         library.MarkPlayed(sound);await Dispatcher.Yield(DispatcherPriority.ContextIdle);
         Check(window.Title=="Soundboard Lab"&&!library.HasUnsavedChanges,"a playback-statistics refresh keeps the title unchanged and the saved library clean");
         string previous=sound.Title;library.Rename(sound,previous+" edited");await Dispatcher.Yield(DispatcherPriority.ContextIdle);
-        Check(window.Title=="Soundboard Lab"&&library.HasUnsavedChanges,"real edits still mark the library dirty internally while the title remains the app name");
+        Check(window.Title=="Soundboard Lab *"&&library.HasUnsavedChanges,"renaming a sound shows the unsaved marker without revealing the library filename");
+        library.MarkPlayed(sound);await Dispatcher.Yield(DispatcherPriority.ContextIdle);
+        Check(window.Title=="Soundboard Lab *"&&library.HasUnsavedChanges,"playback preserves an existing unsaved-edit marker");
         library.Rename(sound,previous);library.Save();await Dispatcher.Yield(DispatcherPriority.ContextIdle);
+        Check(window.Title=="Soundboard Lab"&&!library.HasUnsavedChanges,"saving an edited library clears its unsaved marker");
+        var alternate=new SoundEntry {Title="Caption order fixture",FilePath=sound.FilePath};library.Document.Entries.Add(alternate);library.Save();await Dispatcher.Yield(DispatcherPriority.ContextIdle);
+        library.Document.Entries.Move(library.Document.Entries.IndexOf(alternate),0);await Dispatcher.Yield(DispatcherPriority.ContextIdle);
+        Check(window.Title=="Soundboard Lab *"&&library.HasUnsavedChanges&&ReferenceEquals(library.Document.Entries[0],alternate),"reordering sounds shows the unsaved marker on the actual main window");
+        library.Save();await Dispatcher.Yield(DispatcherPriority.ContextIdle);
+        Check(window.Title=="Soundboard Lab"&&!library.HasUnsavedChanges,"saving the reordered list clears the marker");
+        library.AddCategory("Caption category");alternate.Category="Caption category";library.Save();await Dispatcher.Yield(DispatcherPriority.ContextIdle);
+        Invoke(window,"CategoryTree_Changed",Field<TreeView>(window,"CategoryTree"),new RoutedPropertyChangedEventArgs<object>(sound,new TreeViewItem {Tag="Caption category"}));
+        Invoke(window,"DeleteCategory_Click",window,new RoutedEventArgs());await Dispatcher.Yield(DispatcherPriority.ContextIdle);
+        Check(window.Title=="Soundboard Lab *"&&library.HasUnsavedChanges&&alternate.Category==""&&!library.Document.Categories.Any(x=>x.Name=="Caption category"),"the Remove category action shows the unsaved marker and preserves its sounds");
+        library.Remove([alternate]);library.Save();await Dispatcher.Yield(DispatcherPriority.ContextIdle);
+        Check(window.Title=="Soundboard Lab"&&!library.HasUnsavedChanges,"saving after category removal clears the marker and keeps the filename hidden");
     }
     private static async Task CheckVirtualizedSoundNumbers(MainWindow window,LibraryStore library,SoundEntry existing)
     {
