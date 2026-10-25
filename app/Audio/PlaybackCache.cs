@@ -6,6 +6,9 @@ namespace SoundboardLab.Audio;
 // changing a file, routing option, or activation sound invalidates it.
 internal sealed class PlaybackCache
 {
+    // Soundpad uses its 89 dB reference for local playback, independently of
+    // the voice-calibrated microphone target (89 - 112 = -23 LU per channel).
+    private const double SpeakerTargetLufs=-23;
     private readonly SemaphoreSlim gate = new(1, 1);
     private CacheKey? key;
     private PreparedPlayback? value;
@@ -27,13 +30,15 @@ internal sealed class PlaybackCache
             var decoded = await AudioFiles.DecodeAsync(next.Clip.Path, token).ConfigureAwait(false);
             if (decoded.Length == 0) throw new InvalidOperationException("This file contains no audio.");
             var activation = next.Activation is {} sound ? await AudioFiles.DecodeAsync(sound.Path, token).ConfigureAwait(false) : [];
-            float[] mic = decoded;
+            float[] speakers=decoded,mic=decoded;
+            if(target!=PlaybackDestination.Microphone&&options.TargetLufs.HasValue)
+                speakers=await Task.Run(()=>DynamicNormalizer.Normalize(decoded,SpeakerTargetLufs,token),token).ConfigureAwait(false);
             if (target != PlaybackDestination.Speakers)
             {
-                if (options.TargetLufs is double loudness) mic = await Task.Run(() => DynamicNormalizer.Normalize(decoded, loudness, token), token).ConfigureAwait(false);
+                if (options.TargetLufs is double loudness) mic = target!=PlaybackDestination.Microphone&&loudness==SpeakerTargetLufs?speakers:await Task.Run(() => DynamicNormalizer.Normalize(decoded, loudness, token), token).ConfigureAwait(false);
                 else if (options.FixedAdjustmentDb != 0) mic = AudioFiles.Edit(decoded, new(Gain: (float)Math.Pow(10, options.FixedAdjustmentDb / 20)));
             }
-            var prepared = PlaybackPreparation.Prepare(decoded, activation, target, options.MicrophoneDelayMs, mic);
+            var prepared = PlaybackPreparation.Prepare(speakers, activation, target, options.MicrophoneDelayMs, mic);
             token.ThrowIfCancellationRequested();
             key = next; value = prepared;
             return prepared;
