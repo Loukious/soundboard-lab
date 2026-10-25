@@ -9,6 +9,7 @@ use `v` followed by the app version; prereleases use a suffix such as `-rc.1`.
 ### Fixed
 
 - Normalize local speaker playback to the original app's independent 89 dB reference when dynamic adjustment is enabled; retain the separate voice-calibrated microphone level.
+- Save playback statistics to recovery without marking the library as edited, adding undo entries or clearing pending redo operations.
 
 ## [0.1.4] - 2026-10-18
 

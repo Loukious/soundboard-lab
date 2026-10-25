@@ -16,20 +16,34 @@ try
     string statisticsState=Path.Combine(temp,"playback-statistics");
     using(var stats=new LibraryStore(statisticsState)){
         var entry=stats.AddFiles([audio]).Single();int structuralChanges=0,statisticsChanges=0;
+        stats.Save(Path.Combine(statisticsState,"saved.json"));
+        int undoBeforePlayback=((Stack<string>)typeof(LibraryStore).GetField("undo",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.GetValue(stats)!).Count;
         stats.Changed+=(_,_)=>structuralChanges++;stats.PlaybackStatisticsChanged+=(_,_)=>statisticsChanges++;
         for(int i=0;i<20;i++)stats.MarkPlayed(entry);
         Check(entry.PlayCount==20&&statisticsChanges==20&&structuralChanges==0,"Playback statistics rebuilt the structural library view or lost triggers.");
+        Check(!stats.HasUnsavedChanges&&((Stack<string>)typeof(LibraryStore).GetField("undo",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.GetValue(stats)!).Count==undoBeforePlayback,"Playing a saved sound marked the library dirty or added playback entries to Undo.");
         stats.FlushPlaybackStatistics();
         using(var recoveredStats=new LibraryStore(statisticsState))Check(recoveredStats.Document.Entries.Single().PlayCount==20,"Flushing playback statistics lost recovery data.");
         stats.MarkPlayed(entry);stats.Save();await Task.Delay(350);
         using(var afterSave=new LibraryStore(statisticsState))Check(afterSave.Document.Entries.Single().PlayCount==21,"An older queued recovery overwrote an explicit save.");
         stats.MarkPlayed(entry);stats.Rename(entry,"Edited after playback");await Task.Delay(350);
+        Check(stats.HasUnsavedChanges,"Playback statistics cleared an actual unsaved library edit.");
         using(var afterEdit=new LibraryStore(statisticsState))Check(afterEdit.Document.Entries.Single() is {PlayCount:22,Title:"Edited after playback"},"An older playback recovery overwrote a structural edit.");
         stats.MarkPlayed(entry);await Task.Delay(500);
         using(var afterTimer=new LibraryStore(statisticsState))Check(afterTimer.Document.Entries.Single().PlayCount==23,"The playback recovery timer did not persist the completed burst.");
         stats.MarkPlayed(entry);
     }
     using(var afterClose=new LibraryStore(statisticsState))Check(afterClose.Document.Entries.Single().PlayCount==24,"Closing the library discarded pending playback statistics.");
+    using(var history=new LibraryStore(Path.Combine(temp,"statistics-history"))){
+        var entry=history.AddFiles([audio]).Single();history.Save();history.Rename(entry,"User edit");history.MarkPlayed(entry);
+        Check(history.Undo()&&history.Document.Entries.Single().Title=="clip","Undo after playback did not undo the actual library edit.");
+        history.MarkPlayed(history.Document.Entries.Single());
+        Check(history.CanRedo&&history.Redo()&&history.Document.Entries.Single().Title=="User edit","Playing a sound discarded the user's pending Redo.");
+        history.Save();history.MarkPlayed(history.Document.Entries.Single());history.FlushPlaybackStatistics();
+        Check(!history.HasUnsavedChanges,"Flushing playback recovery marked a saved library dirty.");
+        history.Rename(history.Document.Entries.Single(),"Another edit");history.MarkPlayed(history.Document.Entries.Single());
+        Check(history.HasUnsavedChanges,"Playing a sound cleared a pending library edit.");
+    }
     string state = Path.Combine(temp, "state");
     using var store = new LibraryStore(state);
     int changed = 0; store.Changed += (_, _) => changed++;

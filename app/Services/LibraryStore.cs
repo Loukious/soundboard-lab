@@ -114,8 +114,14 @@ public sealed class LibraryStore : IDisposable
     public void MarkPlayed(SoundEntry entry)
     {
         updatingPlaybackStatistics = true;
-        try { Batch(() => { entry.PlayCount++; entry.LastPlayed = DateTime.UtcNow; }); }
+        try { entry.PlayCount++; entry.LastPlayed = DateTime.UtcNow; }
         finally { updatingPlaybackStatistics = false; }
+        // Statistics are recovered automatically, rather than being user edits:
+        // keep the dirty flag and both undo/redo stacks exactly as they were.
+        snapshot=Serialize();
+        Interlocked.Exchange(ref pendingPlaybackRecovery,snapshot);
+        playbackRecoveryTimer.Change(250,Timeout.Infinite);
+        PlaybackStatisticsChanged?.Invoke(this,EventArgs.Empty);
     }
     public bool Undo() { if (!undo.TryPop(out string? previous)) return false; try { var target=Parse(previous,stateDirectory);RestoreMovedFiles(target);redo.Push(Serialize());Restore(target);Commit(false);return true; } catch {undo.Push(previous);throw;} }
     public bool Redo() { if (!redo.TryPop(out string? next)) return false; try { var target=Parse(next,stateDirectory);RestoreMovedFiles(target);undo.Push(Serialize());Restore(target);Commit(false);return true; } catch {redo.Push(next);throw;} }
@@ -234,7 +240,10 @@ public sealed class LibraryStore : IDisposable
     }
     private void Checkpoint() { undo.Push(Serialize()); redo.Clear(); }
     private void CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) { SubscribeItems(); if (!restoring) Commit(true); }
-    private void PropertyChanged(object? sender, PropertyChangedEventArgs e) { if (sender is SoundEntry && e.PropertyName==nameof(SoundEntry.IsMissing))return; if (!restoring) Commit(true); }
+    private void PropertyChanged(object? sender, PropertyChangedEventArgs e) {
+        if(sender is SoundEntry&&(e.PropertyName==nameof(SoundEntry.IsMissing)||updatingPlaybackStatistics&&e.PropertyName is nameof(SoundEntry.PlayCount) or nameof(SoundEntry.LastPlayed)))return;
+        if(!restoring)Commit(true);
+    }
     private void SubscribeItems()
     {
         var current = Document.Entries.Cast<INotifyPropertyChanged>().Concat(Document.Categories).Concat(Document.HotbarPins).Append(Document.RootCategory).ToHashSet();
@@ -245,14 +254,7 @@ public sealed class LibraryStore : IDisposable
     {
         if (checkpoint) { undo.Push(snapshot); redo.Clear(); }
         snapshot = Serialize(); HasUnsavedChanges = true;
-        if(updatingPlaybackStatistics){
-            // Capture on the model's owning thread; only the immutable JSON is
-            // written in the background, once the burst of playback has settled.
-            Interlocked.Exchange(ref pendingPlaybackRecovery,snapshot);
-            playbackRecoveryTimer.Change(250,Timeout.Infinite);
-            PlaybackStatisticsChanged?.Invoke(this,EventArgs.Empty);
-        }
-        else { WriteRecovery(); Changed?.Invoke(this, EventArgs.Empty); }
+        WriteRecovery(); Changed?.Invoke(this, EventArgs.Empty);
     }
     private void Restore(LibraryDocument next)
     {
