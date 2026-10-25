@@ -71,6 +71,7 @@ internal static class Program
             await CheckMissingSoundsAndColors(window,library,sound,temp);
             await CheckSearchAndCategoryLayout(window,library,sound,temp);
             await CheckVirtualizedSoundNumbers(window,library,sound);
+            await CheckLibraryCaption(window,library,sound,temp);
             await CheckStableSoundHotkeys(window,library,sound,temp,!layoutOnly);
             await CheckPreferenceResponsiveness(window);
             if(preferenceDevices){int callerThread=Environment.CurrentManagedThreadId,workerThread=0;var clock=System.Diagnostics.Stopwatch.StartNew();var discovered=await Task.Run(()=>{workerThread=Environment.CurrentManagedThreadId;return PreferenceDeviceSnapshot.Read(CancellationToken.None);});Check(workerThread!=callerThread&&discovered.Devices.All(x=>!string.IsNullOrWhiteSpace(x.Id)),"the actual read-only Windows device snapshot completes on its own background thread");Console.WriteLine($"Background device discovery: {clock.Elapsed.TotalMilliseconds:F1} ms for {discovered.Devices.Length} endpoints. No audio stream or volume change.");}
@@ -214,6 +215,16 @@ internal static class Program
             Check(ReferenceEquals(dragged,sound)&&Move() is null,"an intentional row drag still resolves its pressed sound and is consumed only once");
             Check(!window.IsVisible&&!window.IsActive,"resize regression checks use routed events without showing windows, capturing the mouse or sending desktop input");
         }finally{first.Column.Width=originalWidth;Invoke(window,"TakeSoundDrag",new Point(),MouseButtonState.Released);Layout();}
+    }
+    private static async Task CheckLibraryCaption(MainWindow window,LibraryStore library,SoundEntry sound,string temp)
+    {
+        library.Save(Path.Combine(temp,"library.json"));await Dispatcher.Yield(DispatcherPriority.ContextIdle);
+        Check(window.Title=="Soundboard Lab"&&!library.HasUnsavedChanges,"saving library.json keeps only the application name in the main window title");
+        library.MarkPlayed(sound);await Dispatcher.Yield(DispatcherPriority.ContextIdle);
+        Check(window.Title=="Soundboard Lab"&&!library.HasUnsavedChanges,"a playback-statistics refresh keeps the title unchanged and the saved library clean");
+        string previous=sound.Title;library.Rename(sound,previous+" edited");await Dispatcher.Yield(DispatcherPriority.ContextIdle);
+        Check(window.Title=="Soundboard Lab"&&library.HasUnsavedChanges,"real edits still mark the library dirty internally while the title remains the app name");
+        library.Rename(sound,previous);library.Save();await Dispatcher.Yield(DispatcherPriority.ContextIdle);
     }
     private static async Task CheckVirtualizedSoundNumbers(MainWindow window,LibraryStore library,SoundEntry existing)
     {
