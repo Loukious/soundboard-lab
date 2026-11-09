@@ -20,6 +20,8 @@ SB_API int SB_Push(const float* stereo48k, int frames);
 SB_API void SB_Stop();
 SB_API void SB_SetControls(float micGain, float clipGain, int blockVoice, int paused);
 SB_API int SB_GetLastError();
+// Observe an existing endpoint without claiming its producer or changing controls.
+SB_API int SB_QueryEndpointStatus(const wchar_t* endpointId,SB_Status* status);
 
 // Independent producer handles allow one app to route to several capture endpoints.
 SB_API void* SB_CreateClient(const wchar_t* endpointId);

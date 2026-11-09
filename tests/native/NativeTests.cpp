@@ -158,6 +158,24 @@ void BroadcastTests() {
     SB_Stop();first.Process(1);second.Process(1);SB_Close();
     std::cout<<"PASS: independent APO cursors, broadcast, ring wraparound, backpressure, stop frees full queue\n";
 }
+void StatusObservationTests() {
+    auto missing=Endpoint(L"missing-observer");SB_Status status={};
+    Check(SB_QueryEndpointStatus(missing.c_str(),nullptr)==static_cast<int>(E_POINTER),"Observer rejects null status");
+    Check(SB_QueryEndpointStatus(L"",&status)==static_cast<int>(E_INVALIDARG),"Observer rejects empty endpoint");
+    Check(SB_QueryEndpointStatus(missing.c_str(),&status)<0&&!status.connected,"Observer reports an absent mapping");
+    Check(SB_Open(missing.c_str())<0,"Observer does not create an absent mapping");
+    auto endpoint=Endpoint(L"status-observer");APO apo(endpoint);apo.Process(1,BUFFER_SILENT);
+    void* producer=SB_CreateClient(endpoint.c_str());Check(producer!=nullptr,"Producer opens before status observer");
+    SB_ClientSetControls(producer,.5f,.25f,0,0);float clip[]={.2f,.2f,.2f,.2f};
+    Check(SB_ClientPush(producer,clip,2)==2,"Producer queues audio before observer");
+    SB_Status before={},after={};SB_ClientGetStatus(producer,&before);int error=SB_GetLastError();
+    Check(SB_QueryEndpointStatus(endpoint.c_str(),&status)==0&&status.connected&&status.activeConsumers==1,"Observer reads a live endpoint with an existing producer");
+    Check(SB_GetLastError()==error,"Observer preserves producer diagnostics");
+    SB_ClientGetStatus(producer,&after);Check(before.queuedFrames==2&&after.queuedFrames==2&&status.queuedFrames==2,"Observer preserves queued audio and cursors");
+    apo.Process(2,BUFFER_VALID,.4f);Near(apo.output[0],.25f,"Observer preserves microphone and clip gains");
+    SB_DestroyClient(producer);
+    std::cout<<"PASS: non-owning endpoint status observation preserves audio, controls and producer state\n";
+}
 void OriginalTests() {
     auto* f=new OriginalFactory();DWORD cookie=0;HR(CoRegisterClassObject(CLSID_TestOriginal,f,CLSCTX_INPROC_SERVER,REGCLS_MULTIPLEUSE,&cookie),"Register process-local original factory");f->Release();
     {
@@ -206,7 +224,7 @@ int wmain(int argc,wchar_t** argv) {
     try {
         Check(factory!=nullptr,"Factory export exists");if(argc==5 && std::wstring(argv[1])==L"--child")return Child(argv[2],argv[3],argv[4]);
         Check(SB_Open(L"missing-native-test-endpoint")<0,"Missing endpoint error");Check(SB_GetLastError()<0,"Last error available");
-        AggregationTests();BasicTests();FormatTests();BroadcastTests();OriginalTests();ConcurrentTests();CrossProcessTests();IndependentClientTests();
+        AggregationTests();BasicTests();FormatTests();BroadcastTests();StatusObservationTests();OriginalTests();ConcurrentTests();CrossProcessTests();IndependentClientTests();
         auto unload=reinterpret_cast<CanUnload>(GetProcAddress(dll,"DllCanUnloadNow"));Check(unload&&unload()==S_OK,"All COM instances released");
         std::cout<<"ALL NATIVE TESTS PASSED: "<<checks<<" assertions; DLL not installed, no audio endpoint settings changed.\n";
         FreeLibrary(dll);CoUninitialize();return 0;

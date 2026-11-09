@@ -9,6 +9,7 @@ use `v` followed by the app version; prereleases use a suffix such as `-rc.1`.
 ### Fixed
 
 - Restore the saved library path and clean/unsaved state after restart; retain playback statistics and preserve genuine recovered edits.
+- Keep menus responsive by polling microphone status on a single background worker without acquiring the audio producer, avoiding OLE clipboard access when opening Edit, and dispatching tray popup opening after its native callback returns.
 - Restore the unsaved-change asterisk for library edits, including sound reordering and category removal, while keeping library filenames out of the title and playback statistics out of the dirty state.
 
 ## [0.1.5] - 2026-10-25

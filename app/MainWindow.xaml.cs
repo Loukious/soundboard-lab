@@ -129,7 +129,7 @@ public partial class MainWindow : Window
             if (Settings.RemoteEnabled && !arguments.Contains("--smoke-test"))try{remote.Start();}catch(IOException ex){Log("Remote control could not start: "+ex.Message);}
             statusTimer.Start(); saveTimer.Start();
             Log("Ready. Add sounds or drag a folder into the library.");
-            if(Settings.CheckDevicesOnStartup&&!arguments.Contains("--smoke-test")){var status=audio.GetInjectionStatus();if(!status.Connected)Log("Recording device check: "+status.Message);}
+            if(Settings.CheckDevicesOnStartup&&!arguments.Contains("--smoke-test"))RefreshStatus();
             string[] paths = arguments.Where(File.Exists).ToArray();
             if (paths.Length > 0) await AddPathsAsync(paths);
             if (arguments.Contains("--smoke-test")) await RunSmokeTestAsync();
@@ -516,12 +516,6 @@ public partial class MainWindow : Window
         try{notifications.SpeakerVolume=(float)Settings.SpeakerVolume;await notifications.PlayAsync(setting.Path,PlaybackDestination.Speakers);if(wait)while(notifications.IsPlaying)await Task.Delay(15);}catch(Exception ex){Log("Notification: "+ex.Message);}
     }
     private void Diagnostics_Click(object sender, RoutedEventArgs e) => Guard(() => { var dialog = new SaveFileDialog { FileName = "soundboard-diagnostics.json", Filter = "Diagnostic report|*.json" }; if (dialog.ShowDialog(this) == true) File.WriteAllText(dialog.FileName, JsonSerializer.Serialize(new { Version = AppVersion.Current, OS = Environment.OSVersion.ToString(), Devices = audio.Devices, Microphone = audio.GetInjectionStatus(), Settings, Messages = messages.ToArray() }, new JsonSerializerOptions { WriteIndented = true })); });
-    private void RefreshStatus()
-    {
-        if(audio.IsForwarding){MicStatus.Text="Forwarding · "+audio.ForwardingSourceName;MicStatus.ToolTip="Audio forwarding is active. Stop playback or open Preferences → Audio to stop forwarding.";return;}
-        try { var state = audio.GetInjectionStatus(); MicStatus.Text = state.Connected ? $"Mic ready · {microphonePeak:P0}" : "Mic mixing needs setup"; MicStatus.ToolTip = state.Message; }
-        catch (Exception ex) { MicStatus.Text = "Microphone unavailable"; MicStatus.ToolTip = ex.Message; }
-    }
     private async Task<string> HandleRemoteAsync(string json)
     {
         try

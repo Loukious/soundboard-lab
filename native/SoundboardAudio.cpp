@@ -414,6 +414,17 @@ SB_API void SB_DestroyClient(void* pointer){
     if(!pointer)return;std::lock_guard<std::mutex> lock(bridgeMutex);auto* client=static_cast<Mapping*>(pointer);
     if(client->data){Store(&client->data->stopFloor,Load(&client->data->write));Store(&client->data->producer,0);}delete client;
 }
+SB_API int SB_QueryEndpointStatus(const wchar_t* id,SB_Status* status) {
+    if(!status)return static_cast<int>(E_POINTER);
+    *status={};
+    if(!id||!*id){status->lastError=E_INVALIDARG;return status->lastError;}
+    Mapping mapping;HRESULT hr=mapping.Open(id,false);
+    if(FAILED(hr)){status->lastError=hr;return static_cast<int>(hr);}
+    uint64_t minimum=0;Consumer* first=nullptr;
+    status->activeConsumers=Active(mapping.data,GetTickCount64(),&minimum,&first);
+    status->connected=status->activeConsumers>0;status->sampleRate=first?first->rate:48000;status->channels=first?first->channels:2;
+    status->queuedFrames=static_cast<int>(Load(&mapping.data->write)-minimum);return 0;
+}
 SB_API int SB_ClientGetStatus(void* client,SB_Status* status) {
     std::lock_guard<std::mutex> lock(bridgeMutex);if(!client)return Error(E_POINTER);auto& mapping=*static_cast<Mapping*>(client);if(!status)return Error(E_POINTER);*status={};status->lastError=Load(&lastError);
     if(!mapping.data)return 0;

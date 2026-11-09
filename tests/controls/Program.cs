@@ -74,6 +74,7 @@ internal static class Program
             await CheckLibraryCaption(window,library,sound,temp);
             await CheckStableSoundHotkeys(window,library,sound,temp,!layoutOnly);
             await CheckPreferenceResponsiveness(window);
+            await CheckMenuResponsiveness(window);
             if(preferenceDevices){int callerThread=Environment.CurrentManagedThreadId,workerThread=0;var clock=System.Diagnostics.Stopwatch.StartNew();var discovered=await Task.Run(()=>{workerThread=Environment.CurrentManagedThreadId;return PreferenceDeviceSnapshot.Read(CancellationToken.None);});Check(workerThread!=callerThread&&discovered.Devices.All(x=>!string.IsNullOrWhiteSpace(x.Id)),"the actual read-only Windows device snapshot completes on its own background thread");Console.WriteLine($"Background device discovery: {clock.Elapsed.TotalMilliseconds:F1} ms for {discovered.Devices.Length} endpoints. No audio stream or volume change.");}
             if(layoutOnly){CheckHotkeyEditor(window,library,sound);CheckMenusAndSpecialHotkeys(window);await CheckPreferencePages(window,temp);Console.WriteLine($"PASS {checks} headless WPF layout checks. No capture, rendering, window activation or OS input.");return;}
             int frameworkDoubleClicks=0;var frameworkControl=new Control();frameworkControl.MouseDoubleClick+=(_,_)=>frameworkDoubleClicks++;
@@ -215,6 +216,45 @@ internal static class Program
             Check(ReferenceEquals(dragged,sound)&&Move() is null,"an intentional row drag still resolves its pressed sound and is consumed only once");
             Check(!window.IsVisible&&!window.IsActive,"resize regression checks use routed events without showing windows, capturing the mouse or sending desktop input");
         }finally{first.Column.Width=originalWidth;Invoke(window,"TakeSoundDrag",new Point(),MouseButtonState.Released);Layout();}
+    }
+    private static async Task CheckMenuResponsiveness(MainWindow window)
+    {
+        var readerField=typeof(MainWindow).GetField("injectionStatusReader",Private)!;
+        var original=(Func<string[],InjectionStatus>)readerField.GetValue(window)!;
+        var settings=Field<PreferenceStore>(window,"preferenceStore").Settings;
+        string originalDevice=settings.CaptureDeviceId;int caller=Environment.CurrentManagedThreadId,worker=0,calls=0;
+        var entered=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release=new TaskCompletionSource<InjectionStatus>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var watchdog=new Timer(_=>release.TrySetResult(new(false,0,0,0,0,0,"watchdog")),null,5000,Timeout.Infinite);
+        try{
+            var previous=Field<InjectionStatus>(window,"lastInjectionStatus");
+            readerField.SetValue(window,(Func<string[],InjectionStatus>)(_=>{worker=Environment.CurrentManagedThreadId;Interlocked.Increment(ref calls);entered.TrySetResult();return release.Task.GetAwaiter().GetResult();}));
+            var clock=System.Diagnostics.Stopwatch.StartNew();Invoke(window,"RefreshStatus");
+            Check(clock.ElapsedMilliseconds<1000,"starting a held audio-device status query returns immediately to the UI");
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            for(int i=0;i<20;i++)Invoke(window,"RefreshStatus");
+            Check(worker!=caller&&calls==1&&!Field<Task>(window,"statusRefreshTask").IsCompleted,"status polling stays on one background worker instead of piling up requests");
+            var menus=Field<Menu>(window,"MainMenu").Items.OfType<MenuItem>().ToArray();
+            foreach(var menu in menus)menu.RaiseEvent(new RoutedEventArgs(MenuItem.SubmenuOpenedEvent,menu));
+            await Dispatcher.Yield(DispatcherPriority.ContextIdle);
+            Check(!release.Task.IsCompleted&&menus.Length>=5,"File, Edit and other main-menu handlers remain responsive while device discovery is held");
+            settings.CaptureDeviceId="headless-new-status-endpoint";
+            release.TrySetResult(new(true,48000,2,0,1,0,"stale device result"));await Field<Task>(window,"statusRefreshTask");
+            Check(ReferenceEquals(previous,Field<InjectionStatus>(window,"lastInjectionStatus")),"a late status result cannot overwrite a newly selected recording device");
+            readerField.SetValue(window,(Func<string[],InjectionStatus>)(ids=>new(false,0,0,0,0,0,"new device status")));
+            Invoke(window,"RefreshStatus");await Field<Task>(window,"statusRefreshTask");
+            Check(Field<InjectionStatus>(window,"lastInjectionStatus").Message=="new device status"&&Field<TextBlock>(window,"MicStatus").ToolTip as string=="new device status","status polling resumes and updates its label after the previous request finishes");
+            Check(Field<System.Collections.ICollection>(Field<AudioService>(window,"audio"),"nativeClients").Count==0,"UI status checks never acquire a microphone producer or start capture");
+        }finally{release.TrySetResult(new(false,0,0,0,0,0,"released"));if(Field<Task?>(window,"statusRefreshTask") is {} task)await task;readerField.SetValue(window,original);settings.CaptureDeviceId=originalDevice;}
+        int openings=0;ContextMenu? first=null;bool reused=true;
+        using(var tray=new TrayIcon(window,()=>{},()=>{},menu=>{openings++;first??=menu;reused&=ReferenceEquals(first,menu);})){
+            void RightClick()=>Invoke(tray,"Message",IntPtr.Zero,0x8000+42,IntPtr.Zero,new IntPtr(0x205),false);
+            RightClick();RightClick();Check(openings==0,"tray callbacks return before WPF popup opening and coalesce duplicate requests");
+            await Dispatcher.Yield(DispatcherPriority.ContextIdle);Check(openings==1,"the queued tray-menu request is dispatched once without opening a desktop popup in tests");
+            RightClick();await Dispatcher.Yield(DispatcherPriority.ContextIdle);Check(openings==2&&reused,"repeated tray requests reuse the same themed menu");
+            RightClick();tray.Dispose();await Dispatcher.Yield(DispatcherPriority.ContextIdle);Check(openings==2,"disposing the tray cancels its pending popup request");
+        }
+        Check(!window.IsVisible&&!window.IsActive,"menu responsiveness checks leave the real desktop focus and mouse untouched");
     }
     private static async Task CheckLibraryCaption(MainWindow window,LibraryStore library,SoundEntry sound,string temp)
     {

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -10,6 +11,9 @@ namespace SoundboardLab;
 
 public partial class MainWindow
 {
+    // Format availability does not invoke an OLE clipboard owner's delayed
+    // renderer. Clipboard.ContainsFileDropList can block while opening Edit.
+    [DllImport("user32.dll")][return:MarshalAs(UnmanagedType.Bool)]private static extern bool IsClipboardFormatAvailable(uint format);
     private MenuItem HotbarMenu = null!, RecentLibraries = null!;
     private MenuItem Item(string title, RoutedEventHandler? action = null, string gesture = "")
     {
@@ -44,7 +48,7 @@ public partial class MainWindow
         var cut=Item("Cut",(_,_)=>CopyEntries(true),"Ctrl+X");var copy=Item("Copy",(_,_)=>CopyEntries(false),"Ctrl+C");var paste=Item("Paste",(_,_)=>PasteEntries(),"Ctrl+V");
         var remove=Item("Remove selected entries",Remove_Click,"Del");var shuffle=Item("Shuffle list",(_,_)=>ShuffleList());var selectAll=Item("Select all",(_,_)=>SoundGrid.SelectAll(),"Ctrl+A");var dead=Item("Find dead entries",(_,_)=>SelectMissingFiles());
         Add(edit,undo,redo,new Separator(),cut,copy,paste,remove,shuffle,new Separator(),selectAll,recentSelect,dead,new Separator(),Item("Search",Find_Click,"Ctrl+F"));
-        edit.SubmenuOpened+=(_,_)=>{undo.IsEnabled=library.CanUndo;redo.IsEnabled=library.CanRedo;cut.IsEnabled=copy.IsEnabled=remove.IsEnabled=SoundGrid.SelectedItems.Count>0;paste.IsEnabled=copiedEntries.Length>0||Clipboard.ContainsFileDropList();shuffle.IsEnabled=library.Document.Entries.Count>1;selectAll.IsEnabled=dead.IsEnabled=library.Document.Entries.Count>0;recentSelect.IsEnabled=library.Document.Entries.Any(x=>x.LastPlayed.HasValue);};
+        edit.SubmenuOpened+=(_,_)=>{undo.IsEnabled=library.CanUndo;redo.IsEnabled=library.CanRedo;cut.IsEnabled=copy.IsEnabled=remove.IsEnabled=SoundGrid.SelectedItems.Count>0;paste.IsEnabled=copiedEntries.Length>0||IsClipboardFormatAvailable(15);shuffle.IsEnabled=library.Document.Entries.Count>1;selectAll.IsEnabled=dead.IsEnabled=library.Document.Entries.Count>0;recentSelect.IsEnabled=library.Document.Entries.Any(x=>x.LastPlayed.HasValue);};
         var randomAll=Item("Play random from all categories");
         Add(randomAll,RandomItem("Play (speakers and microphone)",PlaybackDestination.Both,true),RandomItem("Play on speakers",PlaybackDestination.Speakers,true),RandomItem("Play on microphone",PlaybackDestination.Microphone,true));
         Add(play,Item("Play selected file (speakers and microphone)",async (_,_)=>await PlaySelectedMode(PlaybackDestination.Both)),Item("Play selected file on speakers only",Speakers_Click),Item("Play selected file on microphone only",Microphone_Click),new Separator(),RandomItem("Play random file (speakers and microphone)",PlaybackDestination.Both),RandomItem("Play random file on speakers only",PlaybackDestination.Speakers),RandomItem("Play random file on microphone only",PlaybackDestination.Microphone),new Separator(),randomAll,new Separator(),RecentSounds("Play recently played file (speakers and microphone)",true),new Separator(),Item("Stop playback",Stop_Click),Item("Pause/resume playback",Pause_Click),Item("Play previous file",Previous_Click),Item("Play next file",Next_Click),new Separator(),Toggle("Continue playback after current file",()=>ContinueBox.IsChecked==true,x=>ContinueBox.IsChecked=x),Toggle("Repeat playback of sound list",()=>Settings.RepeatList,x=>Settings.RepeatList=x),Toggle("Repeat playback of current file",()=>RepeatBox.IsChecked==true,x=>RepeatBox.IsChecked=x),Toggle("Auto stop (recommended)",()=>Settings.StopOnNewSound,x=>Settings.StopOnNewSound=x),new Separator(),ModeMenu());
