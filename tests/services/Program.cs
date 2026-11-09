@@ -13,6 +13,7 @@ try
     using(var lease=new InstanceLease(temp)){Throws<IOException>(()=>{using var duplicateLease=new InstanceLease(temp);},"Two instances acquired the same library lease.");using var independentLease=new InstanceLease(Path.Combine(temp,"isolated"));Check(true,"Independent data directories could not acquire separate instance leases.");}
     using(var recoveredLease=new InstanceLease(temp))Check(true,"Instance lease was not released on shutdown.");
     string audio = Path.Combine(temp, "clip.wav"); File.WriteAllBytes(audio, [0, 1, 2, 3]);
+    RecoveryStateTests.Run(temp,audio,Check);
     string statisticsState=Path.Combine(temp,"playback-statistics");
     using(var stats=new LibraryStore(statisticsState)){
         var entry=stats.AddFiles([audio]).Single();int structuralChanges=0,statisticsChanges=0;

@@ -1,6 +1,9 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Security.Cryptography;
+using System.Text;
 using System.IO;
 using System.Globalization;
 using System.Xml;
@@ -22,7 +25,10 @@ public sealed class LibraryStore : IDisposable
     private bool disposed;
     private readonly object recoveryGate = new();
     private readonly Timer playbackRecoveryTimer;
-    private string? pendingPlaybackRecovery;
+    private sealed record RecoveryInfo(int Version,string? CurrentPath,bool HasUnsavedChanges,string? SavedFileHash);
+    private sealed record RecoverySnapshot(string Content,RecoveryInfo Info);
+    private RecoverySnapshot? pendingPlaybackRecovery;
+    private string? savedFileHash;
     public LibraryDocument Document { get; } = new();
     public string? CurrentPath { get; private set; }
     public bool CanUndo => undo.Count > 0;
@@ -43,21 +49,39 @@ public sealed class LibraryStore : IDisposable
         snapshot = Serialize();
         string recovery = Path.Combine(stateDirectory, "autosave.json");
         if (File.Exists(recovery))
-            try { Restore(Parse(File.ReadAllText(recovery), stateDirectory)); HasUnsavedChanges = true; }
-            catch (Exception ex) when (ex is IOException or JsonException or InvalidDataException) { LastError = ex.Message; }
+            try {
+                string content=File.ReadAllText(recovery);Restore(Parse(content,stateDirectory));HasUnsavedChanges=true;
+                using var json=JsonDocument.Parse(content);
+                if(json.RootElement.TryGetProperty("_Recovery",out var metadata)&&metadata.Deserialize<RecoveryInfo>(JsonOptions) is {Version:1} info){
+                    if(info.CurrentPath is {} path&&Path.IsPathFullyQualified(path))CurrentPath=Path.GetFullPath(path);
+                    savedFileHash=info.SavedFileHash;
+                    HasUnsavedChanges=info.HasUnsavedChanges||!SavedFileMatches();
+                }else{
+                    // Old builds did not persist save state. Recognize their
+                    // default saved file, ignoring automatically saved statistics.
+                    string saved=Path.Combine(stateDirectory,"library.json");
+                    if(File.Exists(saved)){
+                        string savedContent=File.ReadAllText(saved);
+                        if(Structure(Parse(savedContent,stateDirectory))==Structure(Document)){
+                            CurrentPath=Path.GetFullPath(saved);savedFileHash=ContentHash(savedContent);HasUnsavedChanges=false;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException) { LastError = ex.Message; }
     }
     public void New() { Checkpoint(); Restore(new()); CurrentPath = null; Commit(false); }
     public void Load(string path)
     {
         string full = Path.GetFullPath(path);
         if (Path.GetExtension(full).Equals(".spl", StringComparison.OrdinalIgnoreCase)) { ImportSoundpad(full); return; }
-        LibraryDocument next = Parse(File.ReadAllText(full), Path.GetDirectoryName(full)!);
-        Checkpoint(); Restore(next); CurrentPath = full; HasUnsavedChanges = false; WriteRecovery(); Changed?.Invoke(this, EventArgs.Empty);
+        string content=File.ReadAllText(full);LibraryDocument next = Parse(content, Path.GetDirectoryName(full)!);
+        Checkpoint(); Restore(next); CurrentPath = full;savedFileHash=ContentHash(content); HasUnsavedChanges = false; WriteRecovery(); Changed?.Invoke(this, EventArgs.Empty);
     }
     public void Save(string? path = null)
     {
         string target = path ?? CurrentPath ?? Path.Combine(stateDirectory, "library.json");
-        AtomicWrite(target, Serialize()); CurrentPath = Path.GetFullPath(target); HasUnsavedChanges = false; WriteRecovery(); Changed?.Invoke(this, EventArgs.Empty);
+        string content=Serialize();AtomicWrite(target, content); CurrentPath = Path.GetFullPath(target);savedFileHash=ContentHash(content); HasUnsavedChanges = false; WriteRecovery(); Changed?.Invoke(this, EventArgs.Empty);
     }
     public IReadOnlyList<SoundEntry> AddFiles(IEnumerable<string> paths, string category = "")
     {
@@ -119,7 +143,7 @@ public sealed class LibraryStore : IDisposable
         // Statistics are recovered automatically, rather than being user edits:
         // keep the dirty flag and both undo/redo stacks exactly as they were.
         snapshot=Serialize();
-        Interlocked.Exchange(ref pendingPlaybackRecovery,snapshot);
+        Interlocked.Exchange(ref pendingPlaybackRecovery,CaptureRecovery(snapshot));
         playbackRecoveryTimer.Change(250,Timeout.Infinite);
         PlaybackStatisticsChanged?.Invoke(this,EventArgs.Empty);
     }
@@ -303,7 +327,7 @@ public sealed class LibraryStore : IDisposable
     }
     private void WriteRecovery()
     {
-        string content=Serialize();playbackRecoveryTimer.Change(Timeout.Infinite,Timeout.Infinite);
+        var content=CaptureRecovery(Serialize());playbackRecoveryTimer.Change(Timeout.Infinite,Timeout.Infinite);
         lock(recoveryGate){Interlocked.Exchange(ref pendingPlaybackRecovery,null);WriteRecoveryContent(content);}
     }
     public void FlushPlaybackStatistics()
@@ -313,13 +337,22 @@ public sealed class LibraryStore : IDisposable
             if(content is not null&&!WriteRecoveryContent(content))Interlocked.CompareExchange(ref pendingPlaybackRecovery,content,null);
         }
     }
-    private bool WriteRecoveryContent(string content)
+    private RecoverySnapshot CaptureRecovery(string content)=>new(content,new(1,CurrentPath,HasUnsavedChanges,savedFileHash));
+    private static string ContentHash(string content)=>Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content)));
+    private bool SavedFileMatches(){try{return CurrentPath is not null&&savedFileHash is not null&&File.Exists(CurrentPath)&&ContentHash(File.ReadAllText(CurrentPath))==savedFileHash;}catch(Exception ex) when(ex is IOException or UnauthorizedAccessException){return false;}}
+    private static string Structure(LibraryDocument document){
+        var json=JsonSerializer.SerializeToNode(document,JsonOptions)!;
+        foreach(var entry in json["Entries"]!.AsArray()){entry!.AsObject().Remove("PlayCount");entry.AsObject().Remove("LastPlayed");}
+        return json.ToJsonString();
+    }
+    private bool WriteRecoveryContent(RecoverySnapshot recovery)
     {
         try {
-            AtomicWrite(Path.Combine(stateDirectory, "autosave.json"), content);
+            var document=JsonNode.Parse(recovery.Content)!.AsObject();document["_Recovery"]=JsonSerializer.SerializeToNode(recovery.Info,JsonOptions);
+            AtomicWrite(Path.Combine(stateDirectory, "autosave.json"), document.ToJsonString(JsonOptions));
             string backups = Path.Combine(stateDirectory, "backups"); Directory.CreateDirectory(backups);
             string backup = Path.Combine(backups, $"library-{DateTime.Now:yyyy-MM-dd}.json");
-            if (!File.Exists(backup)) AtomicWrite(backup, content);
+            if (!File.Exists(backup)) AtomicWrite(backup, recovery.Content);
             foreach (string obsolete in Directory.EnumerateFiles(backups, "library-*.json").OrderDescending().Skip(30)) File.Delete(obsolete);
             LastError = null;
             return true;

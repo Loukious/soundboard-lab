@@ -8,6 +8,7 @@ use `v` followed by the app version; prereleases use a suffix such as `-rc.1`.
 
 ### Fixed
 
+- Restore the saved library path and clean/unsaved state after restart; retain playback statistics and preserve genuine recovered edits.
 - Restore the unsaved-change asterisk for library edits, including sound reordering and category removal, while keeping library filenames out of the title and playback statistics out of the dirty state.
 
 ## [0.1.5] - 2026-10-25
