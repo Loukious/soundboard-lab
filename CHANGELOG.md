@@ -6,6 +6,8 @@ use `v` followed by the app version; prereleases use a suffix such as `-rc.1`.
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-11-09
+
 ### Fixed
 
 - Restore the saved library path and clean/unsaved state after restart; retain playback statistics and preserve genuine recovered edits.
